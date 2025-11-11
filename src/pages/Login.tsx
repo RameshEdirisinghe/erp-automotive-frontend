@@ -11,7 +11,7 @@ import loginImage4 from "../assets/Login Image - 4.jpg";
 const carouselImages = [loginImage1, loginImage2, loginImage3, loginImage4];
 
 const Login = () => {
-  const handleLoginSubmit = (data: { username: string; password: string; server: string }) => {
+  const handleLoginSubmit = (data: { username: string; password: string }) => {
     console.log("Login data:", data);
   };
 
