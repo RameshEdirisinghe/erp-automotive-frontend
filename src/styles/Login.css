@@ -1,75 +1,315 @@
-
 .login-container {
   position: relative;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: url("../assets/hd-engineering-wheels-black-background-0wl4jqhniw1ln3z2.jpg")
-    no-repeat center center/cover;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
-
-.overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
+.login-content {
+  display: flex;
   width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.35);
-  z-index: 0;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.login-form-section {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #646670 0%, #00000c 100%);
+  margin: 0;
+  border: none;
 }
 
 .login-glass {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 320px;
+  width: 100%;
+  max-width: 400px;
   padding: 40px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0;
 }
 
 .login-glass h2 {
-  margin-bottom: 20px;
-  font-size: 24px;
+  margin-bottom: 30px;
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-align: center;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+.form-group {
+  margin-bottom: 1.5rem;
+}
 
-.login-glass input {
+.form-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-input {
   width: 100%;
-  padding: 12px;
-  margin-bottom: 15px;
-  border: none;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  outline: none;
+  margin: 0;
+}
+
+.form-input:focus {
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.login-btn {
+  width: 100%;
+  padding: 14px;
   background: rgba(255, 255, 255, 0.2);
   color: white;
-  font-size: 14px;
-  outline: none;
-}
-
-.login-glass input::placeholder {
-  color: #e0e0e0;
-}
-
-.login-glass button {
-  width: 100px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.3);
-  color: #fff;
-  font-weight: bold;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.login-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+}
+
+.pro-tip {
+  margin-top: 2.5rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  border-left: 4px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pro-tip-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.pro-tip-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 0.5rem;
+}
+
+.pro-tip-detail {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+}
+
+.login-carousel-section {
+  flex: 1;
+  background: #1a1a1a;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  border: none;
+}
+
+.carousel-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.carousel-slide {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.carousel-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.5s ease-in-out;
+  margin: 0;
+}
+
+.carousel-indicators {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+}
+
+.indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: transparent;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
-.login-glass button:hover {
+.indicator.active {
+  background: rgba(255, 255, 255, 0.9);
+  transform: scale(1.1);
+}
+
+.indicator:hover {
   background: rgba(255, 255, 255, 0.5);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.carousel-image {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@media (max-width: 1024px) {
+  .login-form-section {
+    padding: 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-content {
+    flex-direction: column;
+  }
+  
+  .login-form-section {
+    order: 2;
+    padding: 30px 20px;
+    min-height: 60vh;
+  }
+  
+  .login-carousel-section {
+    order: 1;
+    height: 40vh;
+    min-height: 40vh;
+  }
+  
+  .login-glass h2 {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form-section {
+    padding: 20px 15px;
+    min-height: 60vh;
+  }
+  
+  .login-glass {
+    padding: 30px 20px;
+  }
+  
+  .login-carousel-section {
+    height: 40vh;
+  }
+  
+  .login-glass h2 {
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+  
+  .pro-tip {
+    margin-top: 2rem;
+    padding: 1.25rem;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form-input,
+  .login-btn,
+  .carousel-image,
+  .indicator {
+    transition: none;
+  }
+  
+  .carousel-image {
+    animation: none;
+  }
+}
+
+@media (prefers-contrast: high) {
+  .form-input {
+    border-color: white;
+  }
+  
+  .login-btn {
+    background: white;
+    color: black;
+  }
 }
