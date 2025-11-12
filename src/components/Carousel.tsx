@@ -1,50 +1,40 @@
 import React, { useState, useEffect } from 'react';
+import '../styles/Login.css';
 
-interface CarouselProps {
-  images: string[];
-  autoPlayInterval?: number;
-}
+import bg1 from '../assets/Login Image - 1.jpg';
+import bg2 from '../assets/Login Image - 2.jpg';
+import bg3 from '../assets/Login Image - 3.jpg';
+import bg4 from '../assets/Login Image - 4.jpg';
 
-const Carousel: React.FC<CarouselProps> = ({ 
-  images, 
-  autoPlayInterval = 5000 
-}) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+const Carousel: React.FC = () => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  const images = [
+    bg1,
+    bg2,
+    bg3,
+    bg4
+  ];
 
   useEffect(() => {
+    setIsInitialized(true); 
     const interval = setInterval(() => {
-      setCurrentImageIndex((prevIndex) => 
-        prevIndex === images.length - 1 ? 0 : prevIndex + 1
-      );
-    }, autoPlayInterval);
+      setCurrentSlide((prevSlide) => (prevSlide + 1) % images.length);
+    }, 5000); 
 
     return () => clearInterval(interval);
-  }, [images.length, autoPlayInterval]);
-
-  const handleIndicatorClick = (index: number) => {
-    setCurrentImageIndex(index);
-  };
+  }, [images.length]);
 
   return (
-    <div className="carousel-container">
-      <div className="carousel-slide">
-        <img 
-          src={images[currentImageIndex]} 
-          alt={`Slide ${currentImageIndex + 1}`}
-          className="carousel-image"
+    <div className="login-carousel">
+      {images.map((image, index) => (
+        <div
+          key={index}
+          className={`carousel-slide ${index === currentSlide ? 'active' : ''} ${index === 0 && !isInitialized ? 'initial-active' : ''}`} 
+          style={{ backgroundImage: `url(${image})` }}
         />
-      </div>
-      
-      <div className="carousel-indicators">
-        {images.map((_, index) => (
-          <button
-            key={index}
-            className={`indicator ${index === currentImageIndex ? 'active' : ''}`}
-            onClick={() => handleIndicatorClick(index)}
-            aria-label={`Go to slide ${index + 1}`}
-          />
-        ))}
-      </div>
+      ))}
     </div>
   );
 };
