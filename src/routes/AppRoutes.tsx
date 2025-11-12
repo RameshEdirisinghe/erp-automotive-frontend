@@ -1,10 +1,7 @@
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
-
-
-// Import your page components
 
 const AppRoutes: React.FC = () => {
   return (
