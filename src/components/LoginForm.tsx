@@ -31,6 +31,9 @@ const LoginForm: React.FC = () => {
       
       <form className="login-form" onSubmit={handleSubmit}>
         <div className="form-group">
+          <label htmlFor="username" className="form-label">
+            Username
+          </label>
           <input
             type="text"
             id="username"
@@ -38,15 +41,15 @@ const LoginForm: React.FC = () => {
             className="form-input"
             value={formData.username}
             onChange={handleChange}
-            placeholder="stevec"
+            placeholder="Enter your username"
             required
           />
-          <label htmlFor="username" className="form-label">
-            Username
-          </label>
         </div>
         
         <div className="form-group">
+          <label htmlFor="password" className="form-label">
+            Password
+          </label>
           <input
             type="password"
             id="password"
@@ -54,12 +57,9 @@ const LoginForm: React.FC = () => {
             className="form-input"
             value={formData.password}
             onChange={handleChange}
-            placeholder="Password"
+            placeholder="Enter your password"
             required
           />
-          <label htmlFor="password" className="form-label">
-            Password
-          </label>
         </div>
         
         <button type="submit" className="login-button">
