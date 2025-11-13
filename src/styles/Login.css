@@ -4,56 +4,45 @@
   box-sizing: border-box;
 }
 
-.carousel-slide.initial-active {
-  opacity: 1;
-}
-
 .login-container {
   min-height: 100vh;
   display: flex;
   position: relative;
   overflow: hidden;
   font-family: Arial, sans-serif;
+  align-items: center;
+  justify-content: center;
 }
 
-.login-carousel {
+.login-background {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
-}
-
-.carousel-slide {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  transition: opacity 1s ease-in-out;
+  background-image: url('../assets/Login Image - 1.jpg'); 
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
 
-.carousel-slide.active {
-  opacity: 1;
-}
-
 .login-form-container {
   position: relative;
   z-index: 2;
-  width: 50%;
-  min-height: 100vh;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  width: 400px;
+  height: 400px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px); 
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem;
   font-family: inherit;
+  border-right: 1px solid rgba(255, 255, 255, 0.2); 
+  box-shadow: 0 8px 32px 0 rgba(240, 238, 238, 0.1); 
+  border-radius: 10px; 
+  margin: 0 auto;
 }
 
 .login-form-wrapper {
@@ -80,8 +69,8 @@
 
 .login-title {
   font-size: 2rem;
-  font-weight: 500;
-  color: #333;
+  font-weight: 600;
+  color:  rgb(226, 225, 225);
   margin: 0;
   font-family: inherit; 
 }
@@ -99,62 +88,55 @@
 
 .form-input {
   width: 100%;
-  padding: 0.75rem 0;
-  border: none;
-  border-bottom: 2px solid #ddd;
-  background: transparent;
-  font-size: 1rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(129, 129, 129);
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.9rem;
   transition: all 0.3s ease;
   box-sizing: border-box;
   outline: none;
   font-weight: 500;
   font-family: inherit;
+  color: #e4e2e2;
+  border-radius: 5px;
 }
 
 .form-input::placeholder {
-  color: transparent;
+  color: rgb(190, 189, 189);
   font-family: inherit;
 }
 
 .form-input:focus {
-  border-bottom-color: #000000;
+  border-color: #dfdfdf; 
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); 
 }
 
 .form-label {
-  position: absolute;
-  top: 0.75rem;
-  left: 0;
+  display: block; 
+  position: static; 
+  margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #666;
-  font-size: 1rem;
-  pointer-events: none;
-  transition: all 0.3s ease;
-  font-family: inherit;
-}
-
-.form-input:focus + .form-label,
-.form-input:not(:placeholder-shown) + .form-label {
-  top: -1rem;
-  font-size: 0.8rem;
-  color: #000000;
-  font-weight: 500;
+  color: rgb(226, 225, 225);
+  font-size: 0.9rem;
   font-family: inherit;
 }
 
 .login-button {
   width: 100%;
   padding: 0.75rem;
-  background-color: #000000;
-  color: white;
+  background-color: rgb(190, 189, 189);
+  color: #333232;
   border: none;
   border-radius: 0; 
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
   transition: background-color 0.3s ease;
   margin-top: 1rem;
   text-transform: uppercase;
   font-family: inherit;
+   border-radius: 5px;
 }
 
 @media (max-width: 768px) {
@@ -167,6 +149,8 @@
     max-width: 100%;
     min-height: auto;
     padding: 2rem 1rem;
+    border-right: none;
+    border-top: none;
   }
   
   .login-form-wrapper {
@@ -206,7 +190,7 @@
   }
   
   .form-input {
-    padding: 0.65rem 0;
+    padding: 0.65rem;
   }
   
   .login-button {
