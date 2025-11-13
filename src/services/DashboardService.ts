@@ -1,0 +1,42 @@
+export const getProducts = () => [
+  {
+    name: "Brake Pad Set",
+    supplier: "Nippon Auto Parts Co.",
+    code: "JPN-SPR-2001",
+    quantity: 8,
+    price: "LKR 39500",
+    date: "20.09.2025",
+  },
+  {
+    name: "Engine Oil Filter",
+    supplier: "Tokyo Motors Ltd.",
+    code: "JPN-SPR-2002",
+    quantity: 3,
+    price: "LKR 17900",
+    date: "19.09.2025",
+  },
+  {
+    name: "Radiator Fan",
+    supplier: "Yamato Spare Traders",
+    code: "JPN-SPR-2003",
+    quantity: 0,
+    price: "LKR 68500",
+    date: "18.09.2025",
+  },
+  {
+    name: "Headlight Assembly",
+    supplier: "Osaka Auto Imports",
+    code: "JPN-SPR-2004",
+    quantity: 4,
+    price: "LKR 205000",
+    date: "18.09.2025",
+  },
+  {
+    name: "Shock Absorber Set",
+    supplier: "Kobe Auto Supplies",
+    code: "JPN-SPR-2005",
+    quantity: 6,
+    price: "LKR 138000",
+    date: "17.09.2025",
+  },
+];
