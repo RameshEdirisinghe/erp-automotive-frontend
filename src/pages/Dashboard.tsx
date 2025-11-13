@@ -4,6 +4,8 @@ import {
   LayoutGrid,
   Package,
   ClipboardList,
+  DollarSign,
+  FileText,
   Settings,
   User,
 } from "lucide-react";
@@ -50,11 +52,22 @@ const Dashboard: React.FC = () => {
             {isOpen && <span className="text-sm font-semibold">Inventory</span>}
           </div>
 
-          {/* Quotations */}
+          
           <div className="flex items-center space-x-3 px-4 py-2 hover:bg-gray-800 cursor-pointer rounded-md">
             <ClipboardList size={20} />
             {isOpen && <span className="text-sm font-semibold">Quotations</span>}
           </div>
+
+            <div className="flex items-center space-x-3 px-4 py-2 hover:bg-gray-800 cursor-pointer rounded-md">
+            <DollarSign size={20} />
+            {isOpen && <span className="text-sm font-semibold">Finance</span>}
+          </div>
+
+            <div className="flex items-center space-x-3 px-4 py-2 hover:bg-gray-800 cursor-pointer rounded-md">
+            <FileText size={20} />
+            {isOpen && <span className="text-sm font-semibold">Invoice</span>}
+          </div>
+
         </div>
 
     
