@@ -9,11 +9,10 @@ const LoginForm: React.FC = () => {
     email: '',
     password: ''
   });
-  const [localError, setLocalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{email?: string, password?: string}>({});
   const navigate = useNavigate();
 
-  const { login, isLoading, error, clearError } = useAuth();
+  const { login, isLoading } = useAuth(); // Only need login and isLoading
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -22,20 +21,22 @@ const LoginForm: React.FC = () => {
       [name]: value
     }));
     
+    // Clear errors when user starts typing
     if (fieldErrors[name as keyof typeof fieldErrors]) {
-      setFieldErrors(prev => ({...prev, [name]: undefined}));
+      setFieldErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
     }
-    if (localError) setLocalError(null);
-    if (error) clearError();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    setLocalError(null);
+    // Clear previous errors
     setFieldErrors({});
-    clearError();
 
+    // Field validation
     const errors: {email?: string, password?: string} = {};
 
     if (!formData.email.trim()) {
@@ -64,14 +65,13 @@ const LoginForm: React.FC = () => {
       
       navigate('/');
       
-    } catch (err) {
-      console.log("Login error occurred");
-      if (error) {
-        setFieldErrors({
-          email: error, 
-          password: error
-        });
-      }
+    } catch (err: any) {
+      console.log("Login error occurred", err);
+      const errorMessage = err.message || 'Invalid email or password. Please try again.';
+      setFieldErrors({
+        email: errorMessage, 
+        password: errorMessage
+      });
     }
   };
 
