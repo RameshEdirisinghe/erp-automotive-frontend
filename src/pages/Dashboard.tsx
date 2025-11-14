@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import DashboardOverview from "../components/DashboardOverview";
 import SearchFilter from "../components/SearchFilter";
-import ProductTable from "../components/ProductTable";
+import ReusableTable from "../components/ReusableTable";
 import { User } from "lucide-react";
 
 const Dashboard: React.FC = () => {
@@ -10,14 +10,11 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
-
       
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
-    
       <div className="flex-1 flex flex-col">
 
-       
         <div
           className="
             h-16 bg-[#1e293b]/80 backdrop-blur-xl 
@@ -54,7 +51,8 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <ProductTable />
+           
+            <ReusableTable endpoint="/api/table" />
           </div>
         </main>
       </div>
