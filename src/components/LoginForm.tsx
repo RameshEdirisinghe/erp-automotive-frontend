@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import '../styles/Login.css';
 import logo from '../assets/logo.png';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginForm: React.FC = () => {
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: ''
   });
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{email?: string, password?: string}>({});
+  const navigate = useNavigate();
+
+  const { login, isLoading, error, clearError } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -14,12 +21,65 @@ const LoginForm: React.FC = () => {
       ...prevState,
       [name]: value
     }));
+    
+    if (fieldErrors[name as keyof typeof fieldErrors]) {
+      setFieldErrors(prev => ({...prev, [name]: undefined}));
+    }
+    if (localError) setLocalError(null);
+    if (error) clearError();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('Login attempt:', formData);
+    setLocalError(null);
+    setFieldErrors({});
+    clearError();
+
+    const errors: {email?: string, password?: string} = {};
+
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        errors.email = 'Please enter a valid email address';
+      }
+    }
+
+    if (!formData.password.trim()) {
+      errors.password = 'Password is required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    try {
+      await login({ 
+        email: formData.email.trim(),
+        password: formData.password.trim()
+      });
+      
+      navigate('/');
+      
+    } catch (err) {
+      console.log("Login error occurred");
+      if (error) {
+        setFieldErrors({
+          email: error, 
+          password: error
+        });
+      }
+    }
+  };
+
+  const getInputClassName = (fieldName: string) => {
+    const baseClass = "form-input";
+    return fieldErrors[fieldName as keyof typeof fieldErrors] 
+      ? `${baseClass} form-input-error` 
+      : baseClass;
   };
 
   return (
@@ -31,18 +91,24 @@ const LoginForm: React.FC = () => {
       
       <form className="login-form" onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="username" className="form-label">
-            Username
+          <label htmlFor="email" className="form-label">
+            E-mail
           </label>
+          {fieldErrors.email && (
+            <div className="field-error-message">
+              {fieldErrors.email}
+            </div>
+          )}
           <input
-            type="text"
-            id="username"
-            name="username"
-            className="form-input"
-            value={formData.username}
+            type="email" 
+            id="email"
+            name="email" 
+            className={getInputClassName('email')}
+            value={formData.email}
             onChange={handleChange}
-            placeholder="Enter your username"
+            placeholder="Enter your e-mail"
             required
+            disabled={isLoading}
           />
         </div>
         
@@ -50,20 +116,30 @@ const LoginForm: React.FC = () => {
           <label htmlFor="password" className="form-label">
             Password
           </label>
+          {fieldErrors.password && (
+            <div className="field-error-message">
+              {fieldErrors.password}
+            </div>
+          )}
           <input
             type="password"
             id="password"
             name="password"
-            className="form-input"
+            className={getInputClassName('password')}
             value={formData.password}
             onChange={handleChange}
             placeholder="Enter your password"
             required
+            disabled={isLoading}
           />
         </div>
         
-        <button type="submit" className="login-button">
-          Login
+        <button 
+          type="submit" 
+          className="login-button"
+          disabled={isLoading || !formData.email || !formData.password}
+        >
+          {isLoading ? 'Logging in...' : 'Login'}
         </button>
       </form>
     </div>

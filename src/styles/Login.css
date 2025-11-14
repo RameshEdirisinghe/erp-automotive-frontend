@@ -112,6 +112,11 @@
   box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); 
 }
 
+.form-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .form-label {
   display: block; 
   position: static; 
@@ -136,7 +141,37 @@
   margin-top: 1rem;
   text-transform: uppercase;
   font-family: inherit;
-   border-radius: 5px;
+  border-radius: 5px;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: rgb(210, 209, 209);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-input-error {
+  border-color: #ff6b6b !important;
+  background: rgba(255, 107, 107, 0.1) !important;
+  box-shadow: 0 0 5px rgba(255, 107, 107, 0.5) !important;
+}
+
+.field-error-message {
+  color: #ff6b6b;
+  font-weight: bold;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  text-align: left;
+  font-family: inherit;
+}
+
+.form-input:focus.form-input-error {
+  border-color: #ff6b6b !important;
+  background: rgba(255, 107, 107, 0.15) !important;
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.7) !important;
 }
 
 @media (max-width: 768px) {
@@ -195,5 +230,10 @@
   
   .login-button {
     padding: 0.65rem;
+  }
+  
+  .error-message {
+    padding: 0.65rem;
+    font-size: 0.85rem;
   }
 }
