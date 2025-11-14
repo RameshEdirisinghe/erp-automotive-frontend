@@ -1,152 +1,121 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getTableData } from "../services/DashboardService";
 
 const ProductTable: React.FC = () => {
+  const [data, setData] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const productsPerPage = 5;
 
-  const products = [
-    {
-      id: 1,
-      name: "Engine Oil",
-      category: "Lubricants",
-      stock: 120,
-      price: "$35",
-      supplier: "AutoMax Ltd",
-      date: "2025-11-01",
-    },
-    {
-      id: 2,
-      name: "Brake Pads",
-      category: "Spare Parts",
-      stock: 85,
-      price: "$50",
-      supplier: "DrivePro Supplies",
-      date: "2025-10-28",
-    },
-    {
-      id: 3,
-      name: "Car Battery",
-      category: "Electrical",
-      stock: 45,
-      price: "$120",
-      supplier: "ElectroParts Co.",
-      date: "2025-10-25",
-    },
-    {
-      id: 4,
-      name: "Air Filter",
-      category: "Filters",
-      stock: 200,
-      price: "$25",
-      supplier: "AutoAir Ltd",
-      date: "2025-10-22",
-    },
-    {
-      id: 5,
-      name: "Coolant",
-      category: "Liquids",
-      stock: 150,
-      price: "$30",
-      supplier: "LiquidTech",
-      date: "2025-10-20",
-    },
-    {
-      id: 6,
-      name: "Timing Belt",
-      category: "Mechanical",
-      stock: 70,
-      price: "$80",
-      supplier: "MechPro Auto",
-      date: "2025-10-18",
-    },
-    {
-      id: 7,
-      name: "Spark Plug",
-      category: "Electrical",
-      stock: 300,
-      price: "$10",
-      supplier: "SparkTech",
-      date: "2025-10-15",
-    },
-  ];
+  const rowsPerPage = 5;
 
-  const indexOfLastProduct = currentPage * productsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
-  const currentProducts = products.slice(indexOfFirstProduct, indexOfLastProduct);
+  useEffect(() => {
+    const loadData = async () => {
+      const rows = await getTableData();
+      setData(rows);
+    };
+    loadData();
+  }, []);
 
-  const totalPages = Math.ceil(products.length / productsPerPage);
+  const totalPages = Math.ceil(data.length / rowsPerPage);
 
-  const handleNext = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
 
-  const handlePrev = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
+  const currentRows = data.slice(startIndex, endIndex);
+
+  const columns = ["Column A", "Column B", "Column C", "Column D", "Column E"];
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 mt-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Products</h2>
+    <div className="rounded-2xl bg-[#0f172a] shadow-xl p-6">
+      <h2 className="text-xl font-semibold text-white mb-4">Data Table</h2>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-xl border border-[#334155]">
         <table className="min-w-full border-collapse">
+
+          
           <thead>
-            <tr className="bg-gray-100 text-gray-700 text-sm">
-              <th className="p-3 text-left">Product Name</th>
-              <th className="p-3 text-left">Category</th>
-              <th className="p-3 text-left">Stock</th>
-              <th className="p-3 text-left">Price</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Date</th>
+            <tr className="bg-[#1e293b] text-gray-200 text-sm">
+              {columns.map((col, index) => (
+                <th key={index} className="p-3 text-left">{col}</th>
+              ))}
             </tr>
           </thead>
+
+          
           <tbody>
-            {currentProducts.map((product) => (
-              <tr key={product.id} className="border-t hover:bg-gray-50 transition">
-                <td className="p-3 text-sm text-gray-800">{product.name}</td>
-                <td className="p-3 text-sm text-gray-600">{product.category}</td>
-                <td className="p-3 text-sm text-gray-600">{product.stock}</td>
-                <td className="p-3 text-sm text-gray-600">{product.price}</td>
-                <td className="p-3 text-sm text-gray-600">{product.supplier}</td>
-                <td className="p-3 text-sm text-gray-600">{product.date}</td>
+            {currentRows.map((row, rowIdx) => (
+              <tr
+                key={rowIdx}
+                className={`
+                  ${rowIdx % 2 === 0 ? "bg-[#0f172a]" : "bg-[#111b2d]"}
+                  hover:bg-[#1e293b] transition text-gray-300
+                `}
+              >
+                <td className="p-3 text-sm">{row.col1}</td>
+                <td className="p-3 text-sm text-gray-400">{row.col2}</td>
+                <td className="p-3 text-sm text-gray-400">{row.col3}</td>
+                <td className="p-3 text-sm text-gray-400">{row.col4}</td>
+                <td className="p-3 text-sm text-gray-400">{row.col5}</td>
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 
-      <div className="flex justify-end items-center gap-4 mt-6">
-        <button
-          onClick={handlePrev}
-          disabled={currentPage === 1}
-          className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-            currentPage === 1
-              ? "text-gray-400 cursor-not-allowed"
-              : "text-white bg-blue-600 hover:bg-blue-700 shadow-md"
-          }`}
-        >
-          <ChevronLeft size={18} />
-          Prev
-        </button>
+     
+      <div className="flex justify-between items-center mt-6 px-1">
 
-        <span className="text-gray-700 text-sm font-medium">
-          Page {currentPage} of {totalPages}
-        </span>
+       
+        <p className="text-gray-400 text-sm">
+          Showing {startIndex + 1} to {Math.min(endIndex, data.length)} of {data.length} results
+        </p>
 
-        <button
-          onClick={handleNext}
-          disabled={currentPage === totalPages}
-          className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-            currentPage === totalPages
-              ? "text-gray-400 cursor-not-allowed"
-              : "text-white bg-blue-600 hover:bg-blue-700 shadow-md"
-          }`}
-        >
-          Next
-          <ChevronRight size={18} />
-        </button>
+        
+        <div className="flex items-center gap-2">
+
+        
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+            className={`
+              w-8 h-8 flex items-center justify-center rounded-lg
+              ${currentPage === 1 ? "text-gray-600" : "text-white bg-[#1e40af] hover:bg-[#1e3a8a]"}
+            `}
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          
+          {Array.from({ length: totalPages }).map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentPage(index + 1)}
+              className={`
+                w-8 h-8 flex items-center justify-center rounded-lg text-sm
+                ${currentPage === index + 1
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "text-gray-300 hover:bg-[#1e293b]"}
+              `}
+            >
+              {index + 1}
+            </button>
+          ))}
+
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => p + 1)}
+            className={`
+              w-8 h-8 flex items-center justify-center rounded-lg
+              ${currentPage === totalPages ? "text-gray-600" : "text-white bg-[#1e40af] hover:bg-[#1e3a8a]"}
+            `}
+          >
+            <ChevronRight size={18} />
+          </button>
+
+        </div>
       </div>
+
     </div>
   );
 };
