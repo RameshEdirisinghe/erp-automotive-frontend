@@ -12,7 +12,7 @@ const LoginForm: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<{email?: string, password?: string}>({});
   const navigate = useNavigate();
 
-  const { login, isLoading } = useAuth(); // Only need login and isLoading
+  const { login, isLoading } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -21,7 +21,6 @@ const LoginForm: React.FC = () => {
       [name]: value
     }));
     
-    // Clear errors when user starts typing
     if (fieldErrors[name as keyof typeof fieldErrors]) {
       setFieldErrors(prev => ({
         ...prev,
@@ -33,10 +32,8 @@ const LoginForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Clear previous errors
     setFieldErrors({});
 
-    // Field validation
     const errors: {email?: string, password?: string} = {};
 
     if (!formData.email.trim()) {
