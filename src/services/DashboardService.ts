@@ -1,5 +1,3 @@
-
-
 export const fetchFromBackend = async (endpoint: string) => {
   try {
     const res = await fetch(endpoint);
