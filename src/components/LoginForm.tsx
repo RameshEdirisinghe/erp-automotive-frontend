@@ -60,7 +60,7 @@ const LoginForm: React.FC = () => {
         password: formData.password.trim()
       });
       
-      navigate('/');
+      navigate('/dashboard');
       
     } catch (err: any) {
       console.log("Login error occurred", err);
