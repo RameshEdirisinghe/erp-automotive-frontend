@@ -1,102 +1,251 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchFromBackend } from "../services/DashboardService";
+import { ChevronLeft, ChevronRight, AlertCircle, Edit, Trash2, Plus } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import api from "../api/axios";
 
 interface TableProps {
-  endpoint: string;  
+  endpoint: string;
+  columns?: string[];
+  columnLabels?: { [key: string]: string };
+  onAdd?: () => void;
+  onEdit?: (item: any) => void;
+  onDelete?: (item: any) => void;
+  showActions?: boolean;
+  refreshTrigger?: number;
 }
 
-const ReusableTable: React.FC<TableProps> = ({ endpoint }) => {
+const ReusableTable: React.FC<TableProps> = ({ 
+  endpoint, 
+  columns, 
+  columnLabels = {},
+  onAdd,
+  onEdit,
+  onDelete,
+  showActions = true,
+  refreshTrigger = 0
+}) => {
   const [data, setData] = useState<any[]>([]);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
   const rowsPerPage = 5;
 
-  
   useEffect(() => {
-    fetchFromBackend(endpoint).then((rows) => {
-      setData(Array.isArray(rows) ? rows : []);
-      setPage(1); 
-    });
-  }, [endpoint]);
+    const fetchData = async () => {
+      if (!isAuthenticated) {
+        setLoading(false);
+        setError("Please log in to view data");
+        return;
+      }
 
-  
-  const columns = data.length > 0 ? Object.keys(data[0]) : [];
+      try {
+        setLoading(true);
+        setError(null);
+        console.log(`Fetching data from: ${endpoint}`);
+        
+        const response = await api.get(endpoint);
+        console.log('API Response received:', response.data);
+        
+        const items = Array.isArray(response.data) ? response.data : [];
+        setData(items);
+        setPage(1);
+      } catch (error: any) {
+        console.error(`Error fetching data from ${endpoint}:`, error);
+        
+        if (error.response?.status === 401) {
+          setError("Authentication failed. Please log in again.");
+        } else if (error.response?.status === 403) {
+          setError("You don't have permission to view this data.");
+        } else if (error.response?.status === 404) {
+          setError("Data not found. The endpoint might be incorrect.");
+        } else {
+          setError(error.response?.data?.message || error.message || "Failed to fetch data");
+        }
+        
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [endpoint, isAuthenticated, refreshTrigger]);
+
+  const formatCellValue = (value: any, column: string): string => {
+    if (value === null || value === undefined) return 'N/A';
+    
+    if (column === 'vehicle' && typeof value === 'object') {
+      const vehicle = value as { brand?: string; model?: string; chassis_no?: string; year?: number };
+      return `${vehicle.brand || ''} ${vehicle.model || ''} ${vehicle.chassis_no ? `(${vehicle.chassis_no})` : ''} ${vehicle.year ? `- ${vehicle.year}` : ''}`.trim();
+    }
+    
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+    
+    return String(value);
+  };
+
+  const tableColumns = columns || (data.length > 0 ? Object.keys(data[0]) : []);
+
+  const displayColumns = showActions ? [...tableColumns, 'actions'] : tableColumns;
+
+  const formatColumnName = (column: string) => {
+    if (columnLabels[column]) {
+      return columnLabels[column];
+    }
+    if (column === 'actions') return 'Actions';
+    return column.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+  };
 
   const totalPages = Math.ceil(data.length / rowsPerPage);
   const start = (page - 1) * rowsPerPage;
   const currentRows = data.slice(start, start + rowsPerPage);
 
+  if (!isAuthenticated) {
+    return (
+      <div className="rounded-2xl bg-[#0f172a] shadow-xl p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-white mb-2">Authentication Required</h3>
+        <p className="text-gray-400">Please log in to view data.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl bg-[#0f172a] shadow-xl p-6">
-      <h2 className="text-xl font-semibold text-white mb-4">Data Table</h2>
-
-      <div className="overflow-x-auto rounded-xl border border-[#334155]">
-        <table className="min-w-full border-collapse">
-          <thead>
-            <tr className="bg-[#1e293b] text-gray-200 text-sm">
-              {columns.map((col) => (
-                <th key={col} className="p-3 text-left">{col}</th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {currentRows.map((row, idx) => (
-              <tr
-                key={idx}
-                className={`${idx % 2 ? "bg-[#111b2d]" : "bg-[#0f172a]"} hover:bg-[#1e293b]`}
-              >
-                {columns.map((col) => (
-                  <td key={col} className="p-3 text-sm text-gray-300">
-                    {String(row[col])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-white">Data Table</h2>
+        {onAdd && (
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            Add New
+          </button>
+        )}
       </div>
 
-    
-      <div className="flex justify-between items-center mt-6">
-        <p className="text-gray-400 text-sm">
-          Showing {start + 1} – {Math.min(start + rowsPerPage, data.length)} of {data.length}
-        </p>
-
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage(page - 1)}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg ${
-              page === 1 ? "text-gray-500" : "text-white bg-blue-600 hover:bg-blue-700"
-            }`}
-          >
-            <ChevronLeft size={18} />
-          </button>
-
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i + 1)}
-              className={`w-8 h-8 rounded-lg text-sm ${
-                page === i + 1 ? "bg-blue-600 text-white shadow-md" : "text-gray-300 hover:bg-[#1e293b]"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-
-          <button
-            disabled={page === totalPages}
-            onClick={() => setPage(page + 1)}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg ${
-              page === totalPages ? "text-gray-500" : "text-white bg-blue-600 hover:bg-blue-700"
-            }`}
-          >
-            <ChevronRight size={18} />
-          </button>
+      {error && (
+        <div className="mb-4 p-4 bg-red-900/50 border border-red-700 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          <div>
+            <p className="text-red-200 font-medium">Error loading data</p>
+            <p className="text-red-300 text-sm">{error}</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-8 text-gray-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+          Loading data...
+        </div>
+      ) : data.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+          <p>No data found</p>
+          {!error && <p className="text-sm mt-1">The table is empty or no items match your criteria.</p>}
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-xl border border-[#334155]">
+            <table className="min-w-full border-collapse">
+              <thead>
+                <tr className="bg-[#1e293b] text-gray-200 text-sm">
+                  {displayColumns.map((col) => (
+                    <th key={col} className="p-3 text-left">
+                      {formatColumnName(col)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {currentRows.map((row, idx) => (
+                  <tr
+                    key={idx}
+                    className={`${idx % 2 ? "bg-[#111b2d]" : "bg-[#0f172a]"} hover:bg-[#1e293b]`}
+                  >
+                    {tableColumns.map((col) => (
+                      <td key={col} className="p-3 text-sm text-gray-300">
+                        {formatCellValue(row[col], col)}
+                      </td>
+                    ))}
+                    {showActions && (
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          {onEdit && (
+                            <button
+                              onClick={() => onEdit(row)}
+                              className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit size={16} />
+                            </button>
+                          )}
+                          {onDelete && (
+                            <button
+                              onClick={() => onDelete(row)}
+                              className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-between items-center mt-6">
+            <p className="text-gray-400 text-sm">
+              Showing {start + 1} – {Math.min(start + rowsPerPage, data.length)} of {data.length}
+            </p>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page === 1}
+                  onClick={() => setPage(page - 1)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg ${
+                    page === 1 ? "text-gray-500" : "text-white bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPage(i + 1)}
+                    className={`w-8 h-8 rounded-lg text-sm ${
+                      page === i + 1 ? "bg-blue-600 text-white shadow-md" : "text-gray-300 hover:bg-[#1e293b]"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+
+                <button
+                  disabled={page === totalPages}
+                  onClick={() => setPage(page + 1)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg ${
+                    page === totalPages ? "text-gray-500" : "text-white bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

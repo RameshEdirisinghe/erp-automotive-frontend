@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import api from "../api/axios";
 import type { LoginData, RegisterData, User } from "../types/auth";
 import type { UserRole } from "../types/roles";
@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (data: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  checkAuth: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,15 +25,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem("role");
     return saved ? (saved as UserRole) : null;
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async (): Promise<boolean> => {
+    try {
+
+      await api.get("/inventory-items?limit=1");
+ 
+      if (!user) {
+        console.log("Authentication verified via API call");
+      }
+      
+      setIsLoading(false);
+      return true;
+    } catch (error: any) {
+      console.error("Auth check failed:", error);
+
+      if (error.response?.status === 401) {
+        localStorage.removeItem("user");
+        localStorage.removeItem("role");
+        setUser(null);
+        setRole(null);
+      }
+      
+      setIsLoading(false);
+      return false;
+    }
+  };
 
   const login = async (data: LoginData) => {
     setIsLoading(true);
     try {
       const res = await api.post("/auth/login", data);
-      const loggedUser = res.data.user;
+      const { user: loggedUser } = res.data;
+      
       setUser(loggedUser);
       setRole(loggedUser.role);
       localStorage.setItem("user", JSON.stringify(loggedUser));
@@ -52,15 +84,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await api.post("/auth/logout");
-    setUser(null);
-    setRole(null);
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
+    try {
+      await api.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setUser(null);
+      setRole(null);
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, isAuthenticated, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      role, 
+      isAuthenticated, 
+      isLoading, 
+      login, 
+      register, 
+      logout,
+      checkAuth 
+    }}>
       {children}
     </AuthContext.Provider>
   );

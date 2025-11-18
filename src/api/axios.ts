@@ -1,15 +1,20 @@
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
 
+type QueueItem = {
+  resolve: (value?: unknown) => void;
+  reject: (error?: unknown) => void;
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: QueueItem[] = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach(prom => {
     if (error) prom.reject(error);
     else prom.resolve(token);
@@ -19,10 +24,6 @@ const processQueue = (error: any, token: string | null = null) => {
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   (error) => {
@@ -46,15 +47,14 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-      
         await api.post("/auth/refresh");
         processQueue(null);
         return api(originalRequest);
       } catch (err) {
         processQueue(err, null);
-      
-        localStorage.removeItem("token");
+        
         localStorage.removeItem("user");
+        localStorage.removeItem("role");
         window.location.href = "/login";
         return Promise.reject(err);
       } finally {
