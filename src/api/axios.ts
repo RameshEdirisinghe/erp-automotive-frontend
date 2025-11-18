@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
@@ -16,9 +17,22 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 api.interceptors.response.use(
-  res => res,
-  async error => {
+  (res) => res,
+  async (error) => {
     const originalRequest = error.config;
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -32,12 +46,16 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
+      
         await api.post("/auth/refresh");
         processQueue(null);
         return api(originalRequest);
       } catch (err) {
         processQueue(err, null);
+      
+        localStorage.removeItem("token");
         localStorage.removeItem("user");
+        window.location.href = "/login";
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
