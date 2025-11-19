@@ -64,7 +64,7 @@ const SearchFilter: React.FC<SearchFilterProps> = ({
         <option value="electrical">Electrical</option>
       </select>
 
-     {/* This button is currently non-functional and needs implementation */}
+     {/* 
       <button
         className="
           bg-blue-600 
@@ -81,6 +81,8 @@ const SearchFilter: React.FC<SearchFilterProps> = ({
       >
         More Filters
       </button>
+      */}
+      
     </div>
   );
 };
