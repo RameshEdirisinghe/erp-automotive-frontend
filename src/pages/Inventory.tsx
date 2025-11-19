@@ -19,7 +19,11 @@ const Inventory: React.FC = () => {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [viewMode, setViewMode] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   useEffect(() => {
     loadInventoryStats();
@@ -36,11 +40,19 @@ const Inventory: React.FC = () => {
 
   const handleAddItem = () => {
     setEditingItem(null);
+    setViewMode(false);
     setIsFormOpen(true);
   };
 
   const handleEditItem = (item: InventoryItem) => {
     setEditingItem(item);
+    setViewMode(false);
+    setIsFormOpen(true);
+  };
+
+  const handleViewItem = (item: InventoryItem) => {
+    setEditingItem(item);
+    setViewMode(true);
     setIsFormOpen(true);
   };
 
@@ -58,19 +70,24 @@ const Inventory: React.FC = () => {
 
   const handleFormSubmit = async (formData: any) => {
     try {
-      if (editingItem) {
+      if (editingItem && !viewMode) {
         await inventoryService.update(editingItem.id, formData);
         alert('Item updated successfully!');
-      } else {
-        
+      } else if (!viewMode) {
         await inventoryService.create(formData);
         alert('Item created successfully!');
       }
-      setRefreshTrigger(prev => prev + 1); // Refresh data
+      setRefreshTrigger(prev => prev + 1);
     } catch (error: any) {
       alert(`Operation failed: ${error.message}`);
       throw error;
     }
+  };
+
+  const handleFormClose = () => {
+    setIsFormOpen(false);
+    setEditingItem(null);
+    setViewMode(false);
   };
 
   const inventoryColumns = [
@@ -120,7 +137,12 @@ const Inventory: React.FC = () => {
           <InventoryOverview stats={stats} />
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <SearchFilter />
+            <SearchFilter 
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+            />
           </div>
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
@@ -131,16 +153,21 @@ const Inventory: React.FC = () => {
               onAdd={handleAddItem}
               onEdit={handleEditItem}
               onDelete={handleDeleteItem}
+              onView={handleViewItem}
               showActions={true}
+              refreshTrigger={refreshTrigger}
+              searchTerm={searchTerm}
+              selectedCategory={selectedCategory}
             />
           </div>
 
           <InventoryForm
             isOpen={isFormOpen}
-            onClose={() => setIsFormOpen(false)}
-            onSubmit={handleFormSubmit}
+            onClose={handleFormClose}
+            onSubmit={viewMode ? undefined : handleFormSubmit}
             initialData={editingItem}
-            isEditing={!!editingItem}
+            isEditing={!!editingItem && !viewMode}
+            viewMode={viewMode}
           />
         </main>
       </div>
