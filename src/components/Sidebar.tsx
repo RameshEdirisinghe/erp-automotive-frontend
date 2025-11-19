@@ -97,15 +97,26 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
       
       <div
-        className="
+        onClick={() => handleNavigation("/settings")}
+        className={`
           flex items-center space-x-3 px-4 py-3 
-          hover:bg-white/5 cursor-pointer rounded-xl mx-2 mb-4
+          cursor-pointer rounded-xl mx-2 mb-4
           transition-all duration-300
-        "
+          ${
+            isActive("/settings")
+              ? "bg-blue-500/20 border border-blue-500/30 text-blue-400"
+              : "hover:bg-white/5 hover:shadow-lg hover:-translate-y-0.5"
+          }
+        `}
       >
-        <Settings size={20} className="text-gray-300" />
+        <Settings 
+          size={20} 
+          className={isActive("/settings") ? "text-blue-400" : "text-gray-300"} 
+        />
         {isOpen && (
-          <span className="text-sm font-medium text-gray-200">
+          <span className={`text-sm font-medium ${
+            isActive("/settings") ? "text-blue-400" : "text-gray-200"
+          }`}>
             Settings
           </span>
         )}
