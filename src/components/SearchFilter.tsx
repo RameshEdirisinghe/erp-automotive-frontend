@@ -1,6 +1,18 @@
 import React from "react";
 
-const SearchFilter: React.FC = () => {
+interface SearchFilterProps {
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  selectedCategory: string;
+  onCategoryChange: (value: string) => void;
+}
+
+const SearchFilter: React.FC<SearchFilterProps> = ({
+  searchTerm,
+  onSearchChange,
+  selectedCategory,
+  onCategoryChange,
+}) => {
   return (
     <div
       className="
@@ -15,6 +27,8 @@ const SearchFilter: React.FC = () => {
       <input
         type="text"
         placeholder="Search products..."
+        value={searchTerm}
+        onChange={(e) => onSearchChange(e.target.value)}
         className="
           flex-1 
           bg-[#1e293b] 
@@ -30,6 +44,8 @@ const SearchFilter: React.FC = () => {
       />
 
       <select
+        value={selectedCategory}
+        onChange={(e) => onCategoryChange(e.target.value)}
         className="
           bg-[#1e293b] 
           border border-[#334155] 
@@ -41,11 +57,14 @@ const SearchFilter: React.FC = () => {
           focus:ring-2 focus:ring-blue-500/50
         "
       >
-        <option>All Categories</option>
-        <option>Engine Parts</option>
-        <option>Body Kits</option>
+        <option value="all">All Categories</option>
+        <option value="engine">Engine Parts</option>
+        <option value="body">Body Kits</option>
+        <option value="brake">Brake Systems</option>
+        <option value="electrical">Electrical</option>
       </select>
 
+     {/* This button is currently non-functional and needs implementation */}
       <button
         className="
           bg-blue-600 

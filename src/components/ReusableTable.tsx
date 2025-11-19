@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, AlertCircle, Edit, Trash2, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, AlertCircle, Edit, Trash2, Plus, Eye } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../api/axios";
 
@@ -10,8 +10,11 @@ interface TableProps {
   onAdd?: () => void;
   onEdit?: (item: any) => void;
   onDelete?: (item: any) => void;
+  onView?: (item: any) => void;
   showActions?: boolean;
   refreshTrigger?: number;
+  searchTerm?: string;
+  selectedCategory?: string;
 }
 
 const ReusableTable: React.FC<TableProps> = ({ 
@@ -21,10 +24,14 @@ const ReusableTable: React.FC<TableProps> = ({
   onAdd,
   onEdit,
   onDelete,
+  onView,
   showActions = true,
-  refreshTrigger = 0
+  refreshTrigger = 0,
+  searchTerm = "",
+  selectedCategory = "all"
 }) => {
   const [data, setData] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +49,11 @@ const ReusableTable: React.FC<TableProps> = ({
       try {
         setLoading(true);
         setError(null);
-        console.log(`Fetching data from: ${endpoint}`);
         
         const response = await api.get(endpoint);
-        console.log('API Response received:', response.data);
-        
         const items = Array.isArray(response.data) ? response.data : [];
         setData(items);
+        setFilteredData(items);
         setPage(1);
       } catch (error: any) {
         console.error(`Error fetching data from ${endpoint}:`, error);
@@ -64,6 +69,7 @@ const ReusableTable: React.FC<TableProps> = ({
         }
         
         setData([]);
+        setFilteredData([]);
       } finally {
         setLoading(false);
       }
@@ -71,6 +77,47 @@ const ReusableTable: React.FC<TableProps> = ({
 
     fetchData();
   }, [endpoint, isAuthenticated, refreshTrigger]);
+
+  useEffect(() => {
+    if (data.length === 0) return;
+
+    let filtered = [...data];
+
+    // search filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(item =>
+        item.product_name?.toLowerCase().includes(term) ||
+        item.product_code?.toLowerCase().includes(term) ||
+        item.vehicle?.brand?.toLowerCase().includes(term) ||
+        item.vehicle?.model?.toLowerCase().includes(term)
+      );
+    }
+
+    // category filter
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(item => {
+        const productName = item.product_name?.toLowerCase() || '';
+        const productCode = item.product_code?.toLowerCase() || '';
+        
+        switch (selectedCategory) {
+          case 'engine':
+            return productName.includes('engine') || productCode.includes('eng');
+          case 'body':
+            return productName.includes('bumper') || productName.includes('body') || productCode.includes('fb');
+          case 'brake':
+            return productName.includes('brake') || productCode.includes('cv');
+          case 'electrical':
+            return productName.includes('wire') || productName.includes('electrical') || productCode.includes('el');
+          default:
+            return true;
+        }
+      });
+    }
+
+    setFilteredData(filtered);
+    setPage(1);
+  }, [data, searchTerm, selectedCategory]);
 
   const formatCellValue = (value: any, column: string): string => {
     if (value === null || value === undefined) return 'N/A';
@@ -87,7 +134,7 @@ const ReusableTable: React.FC<TableProps> = ({
     return String(value);
   };
 
-  const tableColumns = columns || (data.length > 0 ? Object.keys(data[0]) : []);
+  const tableColumns = columns || (filteredData.length > 0 ? Object.keys(filteredData[0]) : []);
 
   const displayColumns = showActions ? [...tableColumns, 'actions'] : tableColumns;
 
@@ -99,9 +146,9 @@ const ReusableTable: React.FC<TableProps> = ({
     return column.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
   };
 
-  const totalPages = Math.ceil(data.length / rowsPerPage);
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
   const start = (page - 1) * rowsPerPage;
-  const currentRows = data.slice(start, start + rowsPerPage);
+  const currentRows = filteredData.slice(start, start + rowsPerPage);
 
   if (!isAuthenticated) {
     return (
@@ -143,10 +190,14 @@ const ReusableTable: React.FC<TableProps> = ({
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
           Loading data...
         </div>
-      ) : data.length === 0 ? (
+      ) : filteredData.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <p>No data found</p>
-          {!error && <p className="text-sm mt-1">The table is empty or no items match your criteria.</p>}
+          {(searchTerm || selectedCategory !== "all") ? (
+            <p className="text-sm mt-1">No items match your search criteria.</p>
+          ) : (
+            <p className="text-sm mt-1">The table is empty.</p>
+          )}
         </div>
       ) : (
         <>
@@ -176,6 +227,15 @@ const ReusableTable: React.FC<TableProps> = ({
                     {showActions && (
                       <td className="p-3">
                         <div className="flex items-center gap-2">
+                          {onView && (
+                            <button
+                              onClick={() => onView(row)}
+                              className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          )}
                           {onEdit && (
                             <button
                               onClick={() => onEdit(row)}
@@ -205,7 +265,7 @@ const ReusableTable: React.FC<TableProps> = ({
 
           <div className="flex justify-between items-center mt-6">
             <p className="text-gray-400 text-sm">
-              Showing {start + 1} – {Math.min(start + rowsPerPage, data.length)} of {data.length}
+              Showing {start + 1} – {Math.min(start + rowsPerPage, filteredData.length)} of {filteredData.length}
             </p>
 
             {totalPages > 1 && (
