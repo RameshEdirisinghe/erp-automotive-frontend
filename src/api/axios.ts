@@ -1,5 +1,4 @@
 import axios from "axios";
-import { API_BASE_URL } from "../config/api";
 
 type QueueItem = {
   resolve: (value?: unknown) => void;
@@ -7,7 +6,7 @@ type QueueItem = {
 };
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
 });
 
