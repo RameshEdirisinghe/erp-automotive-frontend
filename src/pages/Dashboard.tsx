@@ -8,51 +8,50 @@ import { User } from "lucide-react";
 const Dashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
 
+  // State for SearchFilter
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
-      
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col">
-
-        <div
-          className="
-            h-16 bg-[#1e293b]/80 backdrop-blur-xl 
-            border-b border-[#334155] 
-            flex items-center justify-end px-6 shadow-lg
-          "
-        >
+        {/* Header */}
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-end px-6 shadow-lg">
           <div className="flex items-center gap-4">
             <input
               type="text"
               placeholder="Search..."
-              className="
-                bg-[#0f172a] border border-[#334155] 
-                rounded-full px-4 py-1.5 text-sm 
-                placeholder:text-gray-400 text-gray-200
-                focus:outline-none focus:ring-2 focus:ring-blue-500/50
-              "
+              className="bg-[#0f172a] border border-[#334155] rounded-full px-4 py-1.5 text-sm placeholder:text-gray-400 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
-            <div className="
-              bg-[#0f172a] border border-[#334155] 
-              p-2 rounded-full cursor-pointer 
-              hover:bg-[#1e293b] transition
-            ">
+            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-5 h-5" />
             </div>
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
           <DashboardOverview />
 
+          {/* Search & Filter Section */}
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <SearchFilter />
+            <SearchFilter
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+            />
           </div>
 
+          {/* Table */}
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-           
-            <ReusableTable endpoint="/api/table" />
+            <ReusableTable
+              endpoint="/api/table"
+              searchTerm={searchTerm}
+              categoryFilter={selectedCategory}
+            />
           </div>
         </main>
       </div>
