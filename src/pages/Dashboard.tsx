@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import DashboardOverview from "../components/DashboardOverview";
 import SearchFilter from "../components/SearchFilter";
-import ReusableTable from "../components/ReusableTable";
+// import ReusableTable from "../components/ReusableTable";
 import { User } from "lucide-react";
 
 const Dashboard: React.FC = () => {
