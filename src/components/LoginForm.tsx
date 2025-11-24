@@ -63,7 +63,7 @@ const LoginForm: React.FC = () => {
     <div className="relative w-full max-w-md">
       {/* Preloader */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/30 backdrop-blur-sm rounded-2xl z-50">
+        <div className="absolute inset-0 flex items-center justify-center z-50">
           <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
         </div>
       )}
