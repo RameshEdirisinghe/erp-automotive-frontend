@@ -30,18 +30,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = !!user;
 
   useEffect(() => {
-    checkAuth();
+    initAuth();
   }, []);
 
-  const checkAuth = async (): Promise<boolean> => {
-    try {
+  const initAuth = async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    await checkAuth();
+  };
 
-      await api.get("/inventory-items?limit=1");
- 
-      if (!user) {
-        console.log("Authentication verified via API call");
-      }
-      
+  const checkAuth = async (): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      await api.get("/auth/me");
       setIsLoading(false);
       return true;
     } catch (error: any) {
@@ -53,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setRole(null);
       }
-      
+
       setIsLoading(false);
       return false;
     }
@@ -64,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.post("/auth/login", data);
       const { user: loggedUser } = res.data;
-      
+
       setUser(loggedUser);
       setRole(loggedUser.role);
       localStorage.setItem("user", JSON.stringify(loggedUser));
@@ -97,16 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      role, 
-      isAuthenticated, 
-      isLoading, 
-      login, 
-      register, 
-      logout,
-      checkAuth 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        role,
+        isAuthenticated,
+        isLoading,
+        login,
+        register,
+        logout,
+        checkAuth
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

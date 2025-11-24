@@ -1,14 +1,14 @@
-import React from 'react';
-import LoginForm from '../components/LoginForm';
-import '../styles/Login.css';
+import React from "react";
+import LoginForm from "../components/LoginForm";
+import bgImage from "../assets/Patrol_Masters_Image.jpg";
 
 const Login: React.FC = () => {
   return (
-    <div className="login-container">
-      <div className="login-background"></div>
-      <div className="login-form-container">
-        <LoginForm />
-      </div>
+    <div
+      className="min-h-screen w-full bg-cover bg-center bg-no-repeat flex items-center justify-center p-4"
+      style={{ backgroundImage: `url(${bgImage})` }}
+    >
+      <LoginForm />
     </div>
   );
 };
