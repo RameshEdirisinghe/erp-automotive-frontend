@@ -95,41 +95,42 @@ const LoginForm: React.FC = () => {
               disabled={isLoading}
               value={formData.email}
               onChange={handleChange}
-              className={`w-full px-4 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${
-                fieldErrors.email ? "ring-2 ring-red-500" : ""
-              }`}
+              className={`w-full px-4 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${fieldErrors.email ? "ring-2 ring-red-500" : ""
+                }`}
             />
           </div>
 
           {/* PASSWORD WITH SHOW/HIDE */}
           <div className="relative">
             {fieldErrors.password && (
-              <p className="text-red-300 text-sm mb-1">
-                {fieldErrors.password}
-              </p>
+              <p className="text-red-300 text-sm mb-1">{fieldErrors.password}</p>
             )}
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Password"
-              disabled={isLoading}
-              value={formData.password}
-              onChange={handleChange}
-              className={`w-full px-4 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${
-                fieldErrors.password ? "ring-2 ring-red-500" : ""
-              }`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-3 text-gray-700 hover:text-gray-900"
-            >
-              {showPassword ? (
-                <EyeSlashIcon className="w-5 h-5" />
-              ) : (
-                <EyeIcon className="w-5 h-5" />
-              )}
-            </button>
+
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Password"
+                disabled={isLoading}
+                value={formData.password}
+                onChange={handleChange}
+                className={`w-full px-4 pr-12 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${fieldErrors.password ? "ring-2 ring-red-500" : ""
+                  }`}
+              />
+
+              {/* Eye Icon Inside Input */}
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-700 hover:text-gray-900"
+              >
+                {showPassword ? (
+                  <EyeSlashIcon className="w-5 h-5" />
+                ) : (
+                  <EyeIcon className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* BUTTON */}
