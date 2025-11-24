@@ -8,7 +8,7 @@ import { User } from "lucide-react";
 const Dashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // State for SearchFilter
+  // Filter state (controlled from SearchFilter)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
@@ -18,7 +18,7 @@ const Dashboard: React.FC = () => {
 
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-end px-6 shadow-lg">
+        <header className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-end px-6 shadow-lg">
           <div className="flex items-center gap-4">
             <input
               type="text"
@@ -26,16 +26,16 @@ const Dashboard: React.FC = () => {
               className="bg-[#0f172a] border border-[#334155] rounded-full px-4 py-1.5 text-sm placeholder:text-gray-400 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
             <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
-              <User className="text-gray-200 w-5 h-5" />
+              <User className="w-5 h-5 text-gray-200" />
             </div>
           </div>
-        </div>
+        </header>
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
           <DashboardOverview />
 
-          {/* Search & Filter Section */}
+          {/* Search & Filter Card */}
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
             <SearchFilter
               searchTerm={searchTerm}
@@ -45,14 +45,12 @@ const Dashboard: React.FC = () => {
             />
           </div>
 
-          {/* Table */}
+          {/* Data Table
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
             <ReusableTable
-              endpoint="/api/table"
-              searchTerm={searchTerm}
-              categoryFilter={selectedCategory}
+              {...({ endpoint: "/api/table", searchTerm, categoryFilter: selectedCategory } as any)}
             />
-          </div>
+          </div> */}
         </main>
       </div>
     </div>
