@@ -86,7 +86,9 @@ const DashboardOverview: React.FC = () => {
           <h3 className="text-lg font-semibold drop-shadow-md">{productCard.title}</h3>
           <p className="text-4xl font-bold mt-2 drop-shadow-xl">{productCard.value}</p>
           <p className="text-sm opacity-90 mt-1">{productCard.desc}</p>
-        </motion.div>    
+        </motion.div>
+
+     
         <div className="hidden md:block col-span-4"></div>
 
       </div>
@@ -95,7 +97,6 @@ const DashboardOverview: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
       
-
         <motion.div
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
