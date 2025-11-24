@@ -1,53 +1,45 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import '../styles/Login.css';
-import logo from '../assets/logo.png';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import logo from "../assets/Patrol_Masters_Logo.png";
+import { useAuth } from "../contexts/AuthContext";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 
 const LoginForm: React.FC = () => {
   const [formData, setFormData] = useState({
-    email: '',
-    password: ''
+    email: "",
+    password: "",
   });
-  const [fieldErrors, setFieldErrors] = useState<{email?: string, password?: string}>({});
-  const navigate = useNavigate();
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
+
+  const navigate = useNavigate();
   const { login, isLoading } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prevState => ({
-      ...prevState,
-      [name]: value
-    }));
-    
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
     if (fieldErrors[name as keyof typeof fieldErrors]) {
-      setFieldErrors(prev => ({
-        ...prev,
-        [name]: undefined
-      }));
+      setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     setFieldErrors({});
 
-    const errors: {email?: string, password?: string} = {};
-
-    if (!formData.email.trim()) {
-      errors.email = 'Email is required';
-    } else {
+    const errors: { email?: string; password?: string } = {};
+    if (!formData.email.trim()) errors.email = "Email is required";
+    else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email.trim())) {
-        errors.email = 'Please enter a valid email address';
-      }
+      if (!emailRegex.test(formData.email.trim()))
+        errors.email = "Please enter a valid email";
     }
-
-    if (!formData.password.trim()) {
-      errors.password = 'Password is required';
-    }
+    if (!formData.password.trim()) errors.password = "Password is required";
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -55,97 +47,101 @@ const LoginForm: React.FC = () => {
     }
 
     try {
-      await login({ 
+      await login({
         email: formData.email.trim(),
-        password: formData.password.trim()
+        password: formData.password.trim(),
       });
-      
-      navigate('/dashboard');
-      
+      navigate("/dashboard");
     } catch (err: any) {
-      console.log("Login error occurred", err);
-      const errorMessage = err.message || 'Invalid email or password. Please try again.';
-      setFieldErrors({
-        email: errorMessage, 
-        password: errorMessage
-      });
+      const msg =
+        err.message || "Invalid email or password. Please try again.";
+      setFieldErrors({ email: msg, password: msg });
     }
   };
 
-  const getInputClassName = (fieldName: string) => {
-    const baseClass = "form-input";
-    return fieldErrors[fieldName as keyof typeof fieldErrors] 
-      ? `${baseClass} form-input-error` 
-      : baseClass;
-  };
-
   return (
-    <div className="login-form-wrapper relative">
-      
+    <div className="relative w-full max-w-md">
+      {/* Preloader */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center z-50">
-          <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+        <div className="absolute inset-0 flex items-center justify-center bg-white/30 backdrop-blur-sm rounded-2xl z-50">
+          <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
         </div>
       )}
 
-      <div className="login-header">
-        {/* <img src={logo} alt="Company Logo" className="login-logo" /> */}
-        <h1 className="login-title">Login</h1>
+      {/* Glassmorphism Card */}
+      <div className="bg-white/20 backdrop-blur-xl shadow-xl rounded-2xl border border-white/30 p-8">
+        <div className="text-center mb-6">
+          <img
+            src={logo}
+            alt="Company Logo"
+            className="w-24 mx-auto mb-3 drop-shadow-lg"
+          />
+          <h1 className="text-2xl font-bold text-white drop-shadow">
+            Patrol Masters Automotive ERP
+          </h1>
+          <p className="text-white/80 mt-1">Login</p>
+        </div>
+
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          {/* EMAIL */}
+          <div>
+            {fieldErrors.email && (
+              <p className="text-red-300 text-sm mb-1">{fieldErrors.email}</p>
+            )}
+            <input
+              type="email"
+              name="email"
+              placeholder="Email"
+              disabled={isLoading}
+              value={formData.email}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${
+                fieldErrors.email ? "ring-2 ring-red-500" : ""
+              }`}
+            />
+          </div>
+
+          {/* PASSWORD WITH SHOW/HIDE */}
+          <div className="relative">
+            {fieldErrors.password && (
+              <p className="text-red-300 text-sm mb-1">
+                {fieldErrors.password}
+              </p>
+            )}
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              disabled={isLoading}
+              value={formData.password}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 rounded-xl bg-white/40 placeholder-gray-700 outline-none focus:ring-2 focus:ring-blue-600 ${
+                fieldErrors.password ? "ring-2 ring-red-500" : ""
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-3 text-gray-700 hover:text-gray-900"
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="w-5 h-5" />
+              ) : (
+                <EyeIcon className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+
+          {/* BUTTON */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all disabled:bg-blue-400"
+          >
+            Login
+          </button>
+        </form>
       </div>
-      
-      <form className="login-form" onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="email" className="form-label">
-            E-mail
-          </label>
-          {fieldErrors.email && (
-            <div className="field-error-message">
-              {fieldErrors.email}
-            </div>
-          )}
-          <input
-            type="email" 
-            id="email"
-            name="email" 
-            className={getInputClassName('email')}
-            value={formData.email}
-            onChange={handleChange}
-            placeholder="Enter your e-mail"
-            required
-            disabled={isLoading}
-          />
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="password" className="form-label">
-            Password
-          </label>
-          {fieldErrors.password && (
-            <div className="field-error-message">
-              {fieldErrors.password}
-            </div>
-          )}
-          <input
-            type="password"
-            id="password"
-            name="password"
-            className={getInputClassName('password')}
-            value={formData.password}
-            onChange={handleChange}
-            placeholder="Enter your password"
-            required
-            disabled={isLoading}
-          />
-        </div>
-        
-        <button 
-          type="submit" 
-          className="login-button"
-          disabled={isLoading}
-        >
-          Login
-        </button>
-      </form>
     </div>
   );
 };
