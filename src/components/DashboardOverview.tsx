@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   AreaChart,
@@ -12,55 +12,124 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { DollarSign, Package } from "lucide-react";
+import { fetchSalesOverview } from "../services/DashboardService";
+
+interface SalesOverviewData {
+  period: string;
+  totalSales: number;
+  totalProducts: number;
+  weeklyData: Array<{
+    week: string;
+    sales: number;
+    products: number;
+  }>;
+}
 
 const DashboardOverview: React.FC = () => {
-  const salesData = [
-    { name: "Week 1", sales: 4000 },
-    { name: "Week 2", sales: 3000 },
-    { name: "Week 3", sales: 2000 },
-    { name: "Week 4", sales: 2780 },
+  const [salesData, setSalesData] = useState<SalesOverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadSalesData = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchSalesOverview();
+        setSalesData(data);
+      } catch (err) {
+        setError("Failed to load sales data");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSalesData();
+  }, []);
+
+  const chartSalesData = salesData?.weeklyData.map(week => ({
+    name: week.week,
+    sales: week.sales,
+  })) || [
+    { name: "Week 1", sales: 0 },
+    { name: "Week 2", sales: 0 },
+    { name: "Week 3", sales: 0 },
+    { name: "Week 4", sales: 0 },
   ];
 
-  const productData = [
-    { name: "Week 1", products: 240 },
-    { name: "Week 2", products: 221 },
-    { name: "Week 3", products: 229 },
-    { name: "Week 4", products: 200 },
+  const chartProductData = salesData?.weeklyData.map(week => ({
+    name: week.week,
+    products: week.products,
+  })) || [
+    { name: "Week 1", products: 0 },
+    { name: "Week 2", products: 0 },
+    { name: "Week 3", products: 0 },
+    { name: "Week 4", products: 0 },
   ];
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
 
   const salesCard = {
     title: "Total Sales",
-    value: "$120,000",
+    value: salesData ? formatCurrency(salesData.totalSales) : "$0",
     desc: "1 month indicator",
     color: "bg-blue-600",
     glow: "shadow-[0_0_25px_rgba(37,99,235,0.6)]",
     icon: (
-      <DollarSign className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)] animate-pulse" />
+      <DollarSign className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
     ),
   };
 
   const productCard = {
     title: "Products",
-    value: "450",
+    value: salesData ? salesData.totalProducts.toString() : "0",
     desc: "1 month indicator",
     color: "bg-green-600",
     glow: "shadow-[0_0_25px_rgba(22,163,74,0.6)]",
     icon: (
-      <Package className="w-10 h-10 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)] animate-pulse" />
+      <Package className="w-10 h-10 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
     ),
   };
+
+  if (loading) {
+    return (
+      <div className="w-full space-y-8">
+        <h2 className="text-2xl font-bold text-white drop-shadow-xl">
+          Dashboard Overview
+        </h2>
+        <div className="flex justify-center items-center h-64">
+          <div className="text-white text-lg">Loading sales data...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full space-y-8">
+        <h2 className="text-2xl font-bold text-white drop-shadow-xl">
+          Dashboard Overview
+        </h2>
+        <div className="flex justify-center items-center h-64">
+          <div className="text-red-400 text-lg">{error}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-8">
       <h2 className="text-2xl font-bold text-white drop-shadow-xl">
-  Dashboard Overview
-  </h2>
+        Dashboard Overview
+      </h2>
 
-
-      
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-
-        
         <motion.div
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -74,7 +143,6 @@ const DashboardOverview: React.FC = () => {
           <p className="text-sm opacity-90 mt-1">{salesCard.desc}</p>
         </motion.div>
 
-        
         <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -88,15 +156,10 @@ const DashboardOverview: React.FC = () => {
           <p className="text-sm opacity-90 mt-1">{productCard.desc}</p>
         </motion.div>
 
-     
         <div className="hidden md:block col-span-4"></div>
-
       </div>
 
-     
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-
-      
         <motion.div
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -104,10 +167,9 @@ const DashboardOverview: React.FC = () => {
           className="rounded-xl p-5 bg-[#0f172a] shadow-xl border border-[#1e293b] col-span-12 md:col-span-6"
         >
           <h3 className="text-lg font-semibold text-white mb-3">Sales Overview</h3>
-
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesData}>
+              <LineChart data={chartSalesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="name" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
@@ -116,7 +178,9 @@ const DashboardOverview: React.FC = () => {
                     backgroundColor: "#1e293b",
                     border: "1px solid #334155",
                     borderRadius: "10px",
+                    color: "#fff",
                   }}
+                  formatter={(value) => [formatCurrency(Number(value)), 'Sales']}
                 />
                 <Line
                   type="monotone"
@@ -131,7 +195,6 @@ const DashboardOverview: React.FC = () => {
           </div>
         </motion.div>
 
-        
         <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -139,17 +202,15 @@ const DashboardOverview: React.FC = () => {
           className="rounded-xl p-5 bg-[#0f172a] shadow-xl border border-[#1e293b] col-span-12 md:col-span-6"
         >
           <h3 className="text-lg font-semibold text-white mb-3">Product Performance</h3>
-
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={productData}>
+              <AreaChart data={chartProductData}>
                 <defs>
                   <linearGradient id="productGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="10%" stopColor="#22c55e" stopOpacity={0.8} />
                     <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="name" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
@@ -158,7 +219,9 @@ const DashboardOverview: React.FC = () => {
                     backgroundColor: "#1e293b",
                     border: "1px solid #334155",
                     borderRadius: "10px",
+                    color: "#fff",
                   }}
+                  formatter={(value) => [value, 'Products']}
                 />
                 <Area
                   type="monotone"
@@ -171,7 +234,6 @@ const DashboardOverview: React.FC = () => {
             </ResponsiveContainer>
           </div>
         </motion.div>
-
       </div>
     </div>
   );

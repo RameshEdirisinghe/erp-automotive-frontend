@@ -7,6 +7,8 @@ import { User } from "lucide-react";
 
 const Dashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
@@ -44,14 +46,19 @@ const Dashboard: React.FC = () => {
         </div>
 
         <main className="flex-1 overflow-y-auto p-6 space-y-4">
+          
           <DashboardOverview />
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <SearchFilter />
+            <SearchFilter 
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+            />
           </div>
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-           
             <ReusableTable endpoint="/api/table" />
           </div>
         </main>
