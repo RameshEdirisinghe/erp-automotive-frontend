@@ -45,7 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
 
     try {
-      await api.get("/auth/me");
       setIsLoading(false);
       return true;
     } catch (error: any) {
