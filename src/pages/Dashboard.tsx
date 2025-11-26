@@ -7,10 +7,9 @@ import { User } from "lucide-react";
 
 const Dashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-
-  // Filter state (controlled from SearchFilter)
+  
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
