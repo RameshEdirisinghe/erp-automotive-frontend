@@ -11,6 +11,7 @@ export interface InventoryItem {
   product_code: string;
   quantity: number;
   sold_count: number;
+  discount_rate?: number;
   status: 'in_stock' | 'out_of_stock' | 'discontinued';
   vehicle: VehicleInfo;
   purchase_price: number;

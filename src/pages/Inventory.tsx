@@ -4,6 +4,8 @@ import InventoryOverview from "../components/InventoryOverview";
 import SearchFilter from "../components/SearchFilter";
 import ReusableTable from "../components/ReusableTable";
 import InventoryForm from "../components/InventoryForm";
+import CustomAlert from "../components/CustomAlert";
+import type { AlertType } from "../components/CustomAlert";
 import { User, Package } from "lucide-react";
 import { inventoryService } from "../services/InventoryService";
 import type { InventoryItem } from "../types/inventory";
@@ -21,9 +23,17 @@ const Inventory: React.FC = () => {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [viewMode, setViewMode] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+
+  const [alert, setAlert] = useState<{ message: string; type: AlertType } | null>(null);
+
+  const [confirmData, setConfirmData] = useState<{
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
 
   useEffect(() => {
     loadInventoryStats();
@@ -34,8 +44,13 @@ const Inventory: React.FC = () => {
       const statsData = await inventoryService.getStats();
       setStats(statsData);
     } catch (error) {
-      console.error('Error loading inventory stats:', error);
+      console.error("Error loading inventory stats:", error);
+      showAlert("Failed to load inventory stats", "error");
     }
+  };
+
+  const showAlert = (message: string, type: AlertType = "info") => {
+    setAlert({ message, type });
   };
 
   const handleAddItem = () => {
@@ -56,30 +71,40 @@ const Inventory: React.FC = () => {
     setIsFormOpen(true);
   };
 
-  const handleDeleteItem = async (item: InventoryItem) => {
-    if (confirm(`Are you sure you want to delete "${item.product_name}"? This action cannot be undone.`)) {
-      try {
-        await inventoryService.delete(item.id);
-        alert('Item deleted successfully!');
-        setRefreshTrigger(prev => prev + 1);
-      } catch (error: any) {
-        alert(`Failed to delete item: ${error.message}`);
-      }
-    }
+  const handleDeleteItem = (item: InventoryItem) => {
+    setConfirmData({
+      message: `Are you sure you want to delete "${item.product_name}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await inventoryService.delete(item.id);
+          showAlert("Item deleted successfully!", "success");
+          setRefreshTrigger(prev => prev + 1);
+        } catch (error: any) {
+          showAlert(`Failed to delete item: ${error.message}`, "error");
+        }
+        setConfirmData(null);
+      },
+      onCancel: () => setConfirmData(null),
+    });
   };
 
   const handleFormSubmit = async (formData: any) => {
     try {
+      const payload = {
+        ...formData,
+        actual_sold_price: formData.sell_price * (1 - (formData.discount_rate || 0) / 100)
+      };
+
       if (editingItem && !viewMode) {
-        await inventoryService.update(editingItem.id, formData);
-        alert('Item updated successfully!');
+        await inventoryService.update(editingItem.id, payload);
+        showAlert("Item updated successfully!", "success");
       } else if (!viewMode) {
-        await inventoryService.create(formData);
-        alert('Item created successfully!');
+        await inventoryService.create(payload);
+        showAlert("Item created successfully!", "success");
       }
       setRefreshTrigger(prev => prev + 1);
     } catch (error: any) {
-      alert(`Operation failed: ${error.message}`);
+      showAlert(`Operation failed: ${error.message}`, "error");
       throw error;
     }
   };
@@ -91,23 +116,27 @@ const Inventory: React.FC = () => {
   };
 
   const inventoryColumns = [
-    'product_name',
-    'product_code', 
-    'quantity',
-    'status',
-    'purchase_price',
-    'sell_price',
-    'vehicle'
+    "product_name",
+    "product_code",
+    "quantity",
+    "status",
+    "purchase_price",
+    "sell_price",
+    "discount_rate",
+    "actual_sold_price"
   ];
 
   const inventoryColumnLabels = {
-    product_name: 'Product Name',
-    product_code: 'Product Code',
-    quantity: 'Quantity',
-    status: 'Status',
-    purchase_price: 'Purchase Price',
-    sell_price: 'Sell Price',
-    vehicle: 'Vehicle Info'
+    product_name: "Product Name",
+    product_code: "Product Code",
+    quantity: "Stock Qty",
+    sold_count: "Sold Qty",
+    status: "Status",
+    purchase_price: "Purchase Price",
+    sell_price: "Sell Price",
+    discount_rate: "Discount (%)",
+    actual_sold_price: "Actual Sold Price",
+    vehicle: "Vehicle Info"
   };
 
   return (
@@ -115,6 +144,7 @@ const Inventory: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col">
+        {/* Header */}
         <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
           <div className="flex items-center gap-3">
             <Package className="text-blue-400 w-6 h-6" />
@@ -137,7 +167,7 @@ const Inventory: React.FC = () => {
           <InventoryOverview stats={stats} />
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <SearchFilter 
+            <SearchFilter
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               selectedCategory={selectedCategory}
@@ -146,7 +176,7 @@ const Inventory: React.FC = () => {
           </div>
 
           <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <ReusableTable 
+            <ReusableTable
               endpoint="/inventory-items"
               columns={inventoryColumns}
               columnLabels={inventoryColumnLabels}
@@ -158,6 +188,12 @@ const Inventory: React.FC = () => {
               refreshTrigger={refreshTrigger}
               searchTerm={searchTerm}
               selectedCategory={selectedCategory}
+              computeRowValue={(column, item) => {
+                if (column === "actual_sold_price") {
+                  return (item.sell_price * (1 - (item.discount_rate || 0) / 100)).toFixed(2);
+                }
+                return item[column];
+              }}
             />
           </div>
 
@@ -171,6 +207,36 @@ const Inventory: React.FC = () => {
           />
         </main>
       </div>
+
+      {alert && (
+        <CustomAlert
+          message={alert.message}
+          type={alert.type}
+          onClose={() => setAlert(null)}
+        />
+      )}
+
+      {confirmData && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4">
+          <div className="bg-[#1e293b] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-lg">
+            <p className="text-white text-center">{confirmData.message}</p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={confirmData.onCancel}
+                className="px-4 py-2 text-gray-300 border border-gray-500 rounded-lg hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmData.onConfirm}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-700"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

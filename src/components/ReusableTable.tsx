@@ -15,6 +15,7 @@ interface TableProps {
   refreshTrigger?: number;
   searchTerm?: string;
   selectedCategory?: string;
+  computeRowValue?: (column: string, item: any) => any;
 }
 
 const ReusableTable: React.FC<TableProps> = ({ 
