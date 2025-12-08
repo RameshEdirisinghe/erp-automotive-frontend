@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Plus, Save } from "lucide-react";
+import { User, FileText, Download, Printer, Plus, Save, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type { InvoiceData, InvoiceItem, InvoiceCustomer } from "../types/invoice";
@@ -10,6 +10,8 @@ import jsPDF from "jspdf";
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.7);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,21 +41,37 @@ const Invoice: React.FC = () => {
   });
 
   useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      setIsMobileView(width < 1024); 
+      if (width < 1024) {
+        setActivePanel('form');
+      }
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  
+  useEffect(() => {
     const calculateInitialScale = () => {
-      if (rightPanelRef.current) {
+      if (rightPanelRef.current && !isMobileView) {
         const panelWidth = rightPanelRef.current.clientWidth;
         const panelHeight = rightPanelRef.current.clientHeight;
         const a4Width = 210 * 3.78;
         const a4Height = 297 * 3.78;
         
-        const availableWidth = panelWidth - 48;
-        const availableHeight = panelHeight - 120;
+        const availableWidth = panelWidth - (isMobileView ? 24 : 48);
+        const availableHeight = panelHeight - (isMobileView ? 100 : 120);
         
         const widthScale = availableWidth / a4Width;
         const heightScale = availableHeight / a4Height;
         
         const calculatedScale = Math.min(widthScale, heightScale);
-        setScale(Math.max(calculatedScale, 0.3));
+        setScale(Math.max(calculatedScale, isMobileView ? 0.2 : 0.3));
       }
     };
 
@@ -64,8 +82,9 @@ const Invoice: React.FC = () => {
     }
     
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [isMobileView]);
 
+  // Generate invoice ID
   useEffect(() => {
     const generateNextInvoiceId = () => {
       const now = new Date();
@@ -312,32 +331,61 @@ const Invoice: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
+        {/* Responsive Header */}
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 md:px-6 shadow-lg">
           <div className="flex items-center gap-3">
-            <FileText className="text-blue-400 w-6 h-6" />
-            <h1 className="text-xl font-semibold text-gray-200">Invoice Management</h1>
+            {isMobileView && (
+              <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="p-2 rounded-lg hover:bg-[#0f172a] transition"
+              >
+                {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            )}
+            <FileText className="text-blue-400 w-5 h-5 md:w-6 md:h-6" />
+            <h1 className="text-lg md:text-xl font-semibold text-gray-200">Invoice Management</h1>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-300 bg-[#0f172a] px-3 py-1 rounded border border-[#334155]">
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
               Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
             </div>
             <button
               onClick={handleSaveInvoice}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base"
             >
-              <Save className="w-4 h-4" />
-              Save Invoice
+              <Save className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Save</span>
             </button>
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
-              <User className="text-gray-200 w-5 h-5" />
+            <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
+              <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
           </div>
         </div>
 
+        {isMobileView && (
+          <div className="flex border-b border-[#334155] bg-[#1e293b]">
+            <button
+              onClick={() => setActivePanel('form')}
+              className={`flex-1 py-3 text-center font-medium ${activePanel === 'form' ? 'bg-[#0f172a] text-blue-400' : 'text-gray-300 hover:text-white'}`}
+            >
+              Form
+            </button>
+            <button
+              onClick={() => setActivePanel('preview')}
+              className={`flex-1 py-3 text-center font-medium ${activePanel === 'preview' ? 'bg-[#0f172a] text-blue-400' : 'text-gray-300 hover:text-white'}`}
+            >
+              Preview
+            </button>
+          </div>
+        )}
+
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel - Form */}
-          <div className="w-1/2 p-6 overflow-y-auto">
+          <div className={`${isMobileView 
+            ? (activePanel === 'form' ? 'w-full' : 'hidden') 
+            : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
+          >
             <InvoiceForm
               invoiceData={invoiceData}
               onFieldChange={handleFieldChange}
@@ -351,26 +399,28 @@ const Invoice: React.FC = () => {
           {/* Right Panel - Canvas */}
           <div 
             ref={rightPanelRef}
-            className="w-1/2 bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden"
+            className={`${isMobileView 
+              ? (activePanel === 'preview' ? 'w-full' : 'hidden') 
+              : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
           >
             {/* Header with controls */}
-            <div className="bg-white border-b border-gray-300 p-4 flex-shrink-0">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-800">Invoice Preview</h2>
-                <div className="flex items-center gap-2">
+            <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                <h2 className="text-base md:text-lg font-semibold text-gray-800">Invoice Preview</h2>
+                <div className="flex items-center justify-end sm:justify-start gap-2">
                   <button
                     onClick={downloadPDF}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base"
                   >
-                    <Download className="w-4 h-4" />
-                    PDF
+                    <Download className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">PDF</span>
                   </button>
                   <button
                     onClick={handlePrint}
-                    className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                    className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base"
                   >
-                    <Printer className="w-4 h-4" />
-                    Print
+                    <Printer className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">Print</span>
                   </button>
                 </div>
               </div>
@@ -379,7 +429,7 @@ const Invoice: React.FC = () => {
             {/* Canvas Container */}
             <div 
               ref={containerRef}
-              className="flex-1 overflow-hidden bg-white flex items-center justify-center p-4"
+              className="flex-1 overflow-hidden bg-white flex items-center justify-center p-2 md:p-4"
             >
               <div
                 ref={invoiceRef}
@@ -389,18 +439,13 @@ const Invoice: React.FC = () => {
                   width: '210mm',
                   minHeight: '297mm',
                   transition: 'transform 0.15s ease-out',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                  boxShadow: isMobileView 
+                    ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
+                    : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                   backgroundColor: 'white'
                 }}
               >
                 <InvoiceCanvas invoiceData={invoiceData} />
-              </div>
-            </div>
-
-            {/* Preview Info */}
-            <div className="bg-gray-50 border-t border-gray-300 p-2 flex-shrink-0">
-              <div className="text-xs text-gray-500 text-center">
-                <p>Preview automatically scales to fit screen • Click PDF or Print to export</p>
               </div>
             </div>
           </div>
