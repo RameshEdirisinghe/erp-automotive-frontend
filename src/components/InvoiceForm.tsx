@@ -12,7 +12,6 @@ interface InvoiceFormProps {
   onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
 }
 
-// Mock inventory data for demonstration
 const mockInventoryItems: InventoryItem[] = [
   {
     _id: "1",
@@ -90,10 +89,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onUpdateItem,
 }) => {
   const [newItem, setNewItem] = useState<Omit<InvoiceItem, 'id' | 'total'>>({
-    item: "", // InventoryItem ID
+    item: "",
     quantity: 1,
     unitPrice: 0,
-    itemName: "", // For display
+    itemName: "",
   });
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(mockInventoryItems);
@@ -102,12 +101,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [itemTotal, setItemTotal] = useState(0);
 
-  // Calculate item total whenever quantity or unitPrice changes
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
   }, [newItem.quantity, newItem.unitPrice]);
 
-  // Filter items based on search term
   useEffect(() => {
     if (searchTerm.length < 2) {
       setFilteredItems([]);
@@ -127,7 +124,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       item: inventoryItem._id,
       itemName: inventoryItem.name,
       quantity: 1,
-      unitPrice: inventoryItem.price, // Auto-fill unit price here
+      unitPrice: inventoryItem.price,
     });
     setSearchTerm(`${inventoryItem.name} (${inventoryItem.itemId})`);
     setShowSuggestions(false);
