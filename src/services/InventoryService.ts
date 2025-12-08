@@ -64,6 +64,8 @@ export const inventoryService = {
 
   // Update inventory item
   async update(id: string, updateData: Partial<InventoryItem>): Promise<InventoryItem> {
+    console.log(updateData);
+    
     try {
       const response = await api.put<InventoryItem>(`/inventory-items/${id}`, updateData);
       return response.data;

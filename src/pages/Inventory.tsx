@@ -70,11 +70,17 @@ const Inventory: React.FC = () => {
 
   const handleFormSubmit = async (formData: any) => {
     try {
+      // calculate actual sold price before submit
+      const payload = {
+        ...formData,
+        actual_sold_price: formData.sell_price * (1 - (formData.discount_rate || 0) / 100)
+      };
+
       if (editingItem && !viewMode) {
-        await inventoryService.update(editingItem.id, formData);
+        await inventoryService.update(editingItem.id, payload);
         alert('Item updated successfully!');
       } else if (!viewMode) {
-        await inventoryService.create(formData);
+        await inventoryService.create(payload);
         alert('Item created successfully!');
       }
       setRefreshTrigger(prev => prev + 1);
@@ -97,16 +103,20 @@ const Inventory: React.FC = () => {
     'status',
     'purchase_price',
     'sell_price',
-    'vehicle'
+    'discount_rate',
+    'actual_sold_price'
   ];
 
   const inventoryColumnLabels = {
     product_name: 'Product Name',
     product_code: 'Product Code',
-    quantity: 'Quantity',
+    quantity: 'Stock Qty',
+    sold_count: 'Sold Qty',
     status: 'Status',
     purchase_price: 'Purchase Price',
     sell_price: 'Sell Price',
+    discount_rate: 'Discount (%)',
+    actual_sold_price: 'Actual Sold Price',
     vehicle: 'Vehicle Info'
   };
 
@@ -158,6 +168,12 @@ const Inventory: React.FC = () => {
               refreshTrigger={refreshTrigger}
               searchTerm={searchTerm}
               selectedCategory={selectedCategory}
+              computeRowValue={(column, item) => {
+                if(column === 'actual_sold_price'){
+                  return (item.sell_price * (1 - (item.discount_rate || 0)/100)).toFixed(2);
+                }
+                return item[column];
+              }}
             />
           </div>
 

@@ -101,6 +101,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         discount_rate: parseFloat(formData.discount_rate) || 0,
         purchase_price: parseFloat(formData.purchase_price) || 0,
         sell_price: parseFloat(formData.sell_price) || 0,
+        actual_sold_price:
+          parseFloat(formData.sell_price || "0") *
+          (1 - (parseFloat(formData.discount_rate || "0") / 100)),
         vehicle: {
           ...formData.vehicle,
           year: parseInt(formData.vehicle.year) || new Date().getFullYear()
@@ -135,6 +138,12 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
   const numberInputClass = (readOnly: boolean) =>
     `w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${readOnly ? "cursor-not-allowed opacity-70" : ""}`;
 
+  const calculateActualSoldPrice = () => {
+    const sell = parseFloat(formData.sell_price || "0");
+    const discount = parseFloat(formData.discount_rate || "0");
+    return (sell * (1 - discount / 100)).toFixed(2);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-[#1e293b] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
@@ -147,9 +156,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Product Info */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-white">Product Information</h3>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Product Name</label>
@@ -157,10 +166,12 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     type="text"
                     value={formData.product_name}
                     onChange={(e) =>
-                      !viewMode && setFormData(prev => ({ ...prev, product_name: e.target.value }))
+                      !viewMode &&
+                      setFormData((prev) => ({ ...prev, product_name: e.target.value }))
                     }
                     readOnly={viewMode}
-                    className={`w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white ${viewMode ? "cursor-not-allowed opacity-70" : ""}`}
+                    className={`w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white ${viewMode ? "cursor-not-allowed opacity-70" : ""
+                      }`}
                   />
                 </div>
 
@@ -170,10 +181,12 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     type="text"
                     value={formData.product_code}
                     onChange={(e) =>
-                      !viewMode && setFormData(prev => ({ ...prev, product_code: e.target.value }))
+                      !viewMode &&
+                      setFormData((prev) => ({ ...prev, product_code: e.target.value }))
                     }
                     readOnly={viewMode}
-                    className={`w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white ${viewMode ? "cursor-not-allowed opacity-70" : ""}`}
+                    className={`w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white ${viewMode ? "cursor-not-allowed opacity-70" : ""
+                      }`}
                   />
                 </div>
 
@@ -184,7 +197,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     min="0"
                     value={formData.quantity}
                     onChange={(e) =>
-                      !viewMode && setFormData(prev => ({ ...prev, quantity: e.target.value }))
+                      !viewMode && setFormData((prev) => ({ ...prev, quantity: e.target.value }))
                     }
                     readOnly={viewMode}
                     className={numberInputClass(viewMode)}
@@ -198,7 +211,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     min="0"
                     value={formData.sold_count}
                     onChange={(e) =>
-                      !viewMode && setFormData(prev => ({ ...prev, sold_count: e.target.value }))
+                      !viewMode &&
+                      setFormData((prev) => ({ ...prev, sold_count: e.target.value }))
                     }
                     readOnly={viewMode}
                     className={numberInputClass(viewMode)}
@@ -207,7 +221,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Discount Rate (%)</label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Discount Rate (%)
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -215,7 +231,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                       step="0.01"
                       value={formData.discount_rate}
                       onChange={(e) =>
-                        !viewMode && setFormData(prev => ({ ...prev, discount_rate: e.target.value }))
+                        !viewMode &&
+                        setFormData((prev) => ({ ...prev, discount_rate: e.target.value }))
                       }
                       readOnly={viewMode}
                       className={numberInputClass(viewMode)}
@@ -227,7 +244,11 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     <select
                       value={formData.status}
                       onChange={(e) =>
-                        !viewMode && setFormData(prev => ({ ...prev, status: e.target.value as any }))
+                        !viewMode &&
+                        setFormData((prev) => ({
+                          ...prev,
+                          status: e.target.value as any,
+                        }))
                       }
                       disabled={viewMode}
                       className={numberInputClass(viewMode)}
@@ -241,11 +262,11 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
               </div>
             </div>
 
-            {/* Pricing & Vehicle Section (same pattern) */}
+            {/* Pricing & Vehicle */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-white">Pricing & Vehicle</h3>
-
               <div className="space-y-4">
+                {/* Purchase Price, Sell Price */}
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Purchase Price</label>
                   <input
@@ -282,7 +303,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                     type="text"
                     value={formData.shipment_code}
                     onChange={(e) =>
-                      !viewMode && setFormData(prev => ({ ...prev, shipment_code: e.target.value }))
+                      !viewMode &&
+                      setFormData((prev) => ({ ...prev, shipment_code: e.target.value }))
                     }
                     readOnly={viewMode}
                     className={numberInputClass(viewMode)}
@@ -330,9 +352,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
                       min="1900"
                       max="2100"
                       value={formData.vehicle.year}
-                      onChange={(e) =>
-                        handleVehicleChange("year", e.target.value)
-                      }
+                      onChange={(e) => handleVehicleChange("year", e.target.value)}
                       readOnly={viewMode}
                       className={numberInputClass(viewMode)}
                     />
@@ -344,9 +364,19 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
 
           <div className="flex justify-between items-center pt-4 border-t border-[#334155]">
             <p className="text-sm text-gray-400">
-              {updatedAt ? `Last Updated At: ${updatedAt}` : ""}
+              {updatedAt && (
+                <>
+                  <span className="text-xs text-gray-400">Last Updated At:</span> <br />
+                  <span className="text-sm text-white">{updatedAt}</span>
+                </>
+              )}
             </p>
 
+            <p className="text-sm text-gray-400">
+              <span className="text-xs text-gray-400">Actual Sold Price:</span> <br />
+              <span className="text-lg font-bold text-green-400">{calculateActualSoldPrice()}</span>
+            </p>
+            
             <div className="flex gap-3">
               <button
                 type="button"
