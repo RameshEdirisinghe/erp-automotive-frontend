@@ -1,6 +1,6 @@
 import React from "react";
 import type { InvoiceData } from "../types/invoice";
-import PatrolMastersLogo from "../assets/Patrol_Masters_Logo.png"; 
+import InvoiceTemplate from "../assets/Business invoice Template.jpg";
 
 interface InvoiceCanvasProps {
   invoiceData: InvoiceData;
@@ -15,216 +15,379 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
       const year = date.getFullYear();
       return `${day}/${month}/${year}`;
     } catch {
-      return "DD/MM/YYYY";
+      return dateString.split('T')[0] || "02/05/2025";
     }
   };
 
   // Calculate tax 
   const calculateTax = () => {
-    return invoiceData.subTotal * 0.18;
+    return invoiceData.subTotal * (20/70); 
   };
 
   const taxAmount = calculateTax();
   const totalAmount = invoiceData.subTotal + taxAmount;
 
+  const getRowColor = (index: number) => {
+    return index % 2 === 0 ? '#f5f5f5' : '#ffffff';
+  };
+
   return (
-    <div 
-      className="bg-white text-gray-800 mx-auto font-sans relative"
-      style={{ 
-        width: '210mm',
-        minHeight: '297mm',
-        padding: '15mm',
-        fontSize: '12px',
-        lineHeight: '1.4',
-        boxSizing: 'border-box',
-        WebkitPrintColorAdjust: 'exact',
-        printColorAdjust: 'exact'
-      }}
-    >
-      {/* Logo */}
-      <div className="absolute top-4 left-4">
-        <img 
-          src={PatrolMastersLogo} 
-          alt="Patrol Masters Automotive Logo"
+    <div className="relative" style={{ width: '210mm', height: '297mm' }}>
+      {/* Background Template Image */}
+      <img 
+        src={InvoiceTemplate} 
+        alt="Invoice Template Background"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1
+        }}
+      />
+
+      {/* Invoice Content Overlay */}
+      <div 
+        className="relative z-10"
+        style={{
+          padding: '15mm',
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          color: '#000000',
+          fontSize: '12px',
+          lineHeight: '1.4',
+          fontFamily: 'Arial, sans-serif'
+        }}
+      >
+ 
+        {/* Customer Name */}
+        <div 
           style={{
-            height: '60px',
-            width: 'auto',
-            maxWidth: '150px'
+            position: 'absolute',
+            top: '54mm',
+            left: '15mm',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            color: '#000000'
+          }}
+        >
+          {invoiceData.customer.name || "Name Surname"}
+        </div>
+
+        {/* Customer Details */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '60mm',
+            left: '15mm',
+            fontSize: '11px',
+            color: '#494949ff',
+            lineHeight: '1.5'
+          }}
+        >
+          <div>{formatDate(invoiceData.issueDate)}</div>
+          <div>{invoiceData.customer.address || "123 Anywhere St., Any City"}</div>
+          <div>{invoiceData.customer.email || "hello@realtygreatsite.com"}</div>
+          <div>{invoiceData.customer.phone || "+123-456-7890"}</div>
+        </div>
+
+        {/* INVOICE */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '60mm',
+            right: '15mm',
+            fontSize: '11px',
+            color: '#000000',
+            textAlign: 'left'
+          }}
+        >
+          INVOICE
+        </div>
+
+        {/* Invoice Number */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '65mm',
+            right: '15mm',
+            fontSize: '13px',
+            color: '#000000',
+            textAlign: 'right'
+          }}
+        >
+          #{invoiceData.invoiceId || "0000000"}
+        </div>
+
+        <div 
+          style={{
+            position: 'absolute',
+            top: '82mm',
+            left: '15mm',
+            right: '15mm',
+            height: '1px',
+            backgroundColor: '#000000',
+            borderTop: '1px solid #000000'
           }}
         />
-      </div>
 
-      {/* Header Section */}
-      <div className="text-center mb-8 pt-8">
-        <h1 className="text-3xl font-bold mb-2 tracking-wider" style={{ fontSize: '28px' }}>
-          PATROL MASTERS AUTOMOTIVE
-        </h1>
-        <div className="text-sm mb-4" style={{ fontSize: '11px' }}>
-          <p>123 Anywhere St., Any City</p>
-          <p>hello@realtygreatsite.com | +123-456-7890</p>
-        </div>
-      </div>
-
-      {/* Invoice Header with Details */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h2 className="font-bold text-lg mb-1" style={{ fontSize: '16px' }}>
-            {invoiceData.customer.name || "Name Surname"}
-          </h2>
-          <div className="text-sm space-y-0.5" style={{ fontSize: '11px' }}>
-            <p>{formatDate(invoiceData.issueDate)}</p>
-            <p>123 Anywhere St., Any City</p>
-            <p>hello@realtygreatsite.com</p>
-            <p>+123-456-7890</p>
+        {/* Table Header */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '88mm',
+            left: '15mm',
+            right: '15mm',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: '#ffffff',
+            display: 'grid',
+            gridTemplateColumns: '60% 13% 13% 14%',
+            backgroundColor: '#2e2d2dff',
+            padding: '3mm 2mm',
+            alignItems: 'center'
+          }}
+        >
+          <div style={{ 
+            paddingLeft: '2mm', 
+            display: 'flex', 
+            alignItems: 'center',
+            height: '100%'
+          }}>
+            DESCRIPTION
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            PRICE
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            QTY
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            TOTAL
           </div>
         </div>
-        
-        <div className="text-right">
-          <h1 className="text-2xl font-bold mb-2" style={{ fontSize: '24px' }}>
-            INVOICE #{invoiceData.invoiceId || "0000000"}
-          </h1>
-        </div>
-      </div>
 
-      {/* Divider Line */}
-      <div className="border-t border-black my-4"></div>
-
-      {/* Items Table Header */}
-      <div className="mb-2">
-        <div className="grid grid-cols-4 gap-4 font-bold text-sm mb-2" style={{ fontSize: '11px' }}>
-          <div className="col-span-2">
-            <h3 className="uppercase">DESCRIPTION</h3>
-          </div>
-          <div className="text-center">
-            <h3 className="uppercase">PRICE</h3>
-          </div>
-          <div className="text-center">
-            <h3 className="uppercase">QTY</h3>
-          </div>
-          
-        </div>
-        
-        {/* Divider Line */}
-        <div className="border-t border-black"></div>
-      </div>
-
-      {/* Items List */}
-      <div className="mb-4">
-        {invoiceData.items.length > 0 ? (
-          invoiceData.items.map((item, index) => (
-            <div key={item.id} className="mb-2">
-              <div className="grid grid-cols-4 gap-4 py-1 text-sm" style={{ fontSize: '11px' }}>
-                <div className="col-span-2">
-                  <div className="font-medium">{item.itemName || `Item ${index + 1}`}</div>
-                  {item.description && (
-                    <div className="text-gray-600 text-xs mt-0.5">{item.description}</div>
-                  )}
+        {/* Items List */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '96mm',
+            left: '15mm',
+            right: '15mm',
+            maxHeight: '70mm',
+            overflow: 'hidden'
+          }}
+        >
+          {invoiceData.items.length > 0 ? (
+            invoiceData.items.map((item, index) => (
+              <div 
+                key={item.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '60% 13% 13% 14%',
+                  backgroundColor: getRowColor(index),
+                  padding: '3mm 2mm',
+                  fontSize: '11px',
+                  color: '#000000',
+                  borderBottom: index < invoiceData.items.length - 1 ? '1px solid #e0e0e0' : 'none',
+                  minHeight: '10mm',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ 
+                  paddingLeft: '2mm', 
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '100%'
+                }}>
+                  {item.itemName || `ITEM NAME / DESCRIPTION`}
                 </div>
-                <div className="text-center">
+                <div style={{ 
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
                   ${item.unitPrice.toFixed(2)}
                 </div>
-                <div className="text-center">
+                <div style={{ 
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
                   {item.quantity}
                 </div>
-                <div className="text-center">
+                <div style={{ 
+                  textAlign: 'center', 
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
                   ${item.total.toFixed(2)}
                 </div>
               </div>
-              {index < invoiceData.items.length - 1 && (
-                <div className="border-t border-gray-300 my-1"></div>
-              )}
+            ))
+          ) : (
+            // Show empty state when no items
+            <div 
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '60% 13% 13% 14%',
+                backgroundColor: '#f5f5f5',
+                padding: '3mm 2mm',
+                fontSize: '11px',
+                color: '#000000',
+                fontStyle: 'italic',
+                minHeight: '10mm',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{ 
+                paddingLeft: '2mm',
+                display: 'flex',
+                alignItems: 'center',
+                height: '100%'
+              }}>
+                No items added
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
             </div>
-          ))
-        ) : (
-          
-          <div className="py-8 text-center text-gray-500 text-sm">
-            No items added to invoice
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Divider Line */}
-      <div className="border-t border-black my-4"></div>
-
-      {/* Payment Details Section */}
-      <div className="mb-6">
-        <div className="grid grid-cols-2 gap-8">
+        {/* Payment Details Section */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '185mm',
+            left: '15mm',
+            right: '15mm',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '20mm',
+            fontSize: '12px',
+            color: '#000000'
+          }}
+        >
           {/* Left Column - Payment Data */}
           <div>
-            <h3 className="font-bold uppercase text-sm mb-2" style={{ fontSize: '11px' }}>
-              PAYMENT DATA:
-            </h3>
-            <div className="text-sm space-y-1" style={{ fontSize: '11px' }}>
-              <p>ACCOUNT#: 12356587965497</p>
-              <p>NAME: YOUR NAME</p>
-              <p>PAYMENT METHOD: {invoiceData.paymentMethod}</p>
-            </div>
+            <div style={{ fontWeight: 'bold', marginBottom: '3mm', fontSize: '12px' }}>PAYMENT DATA:</div>
+            <div style={{ marginBottom: '1mm' }}>ACCOUNT#: {invoiceData.bankAccount || "12356587965497"}</div>
+            <div style={{ marginBottom: '1mm' }}>NAME: {invoiceData.accountName || "YOUR NAME"}</div>
+            <div style={{ marginBottom: '1mm' }}>PAYMENT METHOD: {invoiceData.paymentMethod || "DEBIT CARD"}</div>
           </div>
           
           {/* Right Column - Totals */}
-          <div>
-            <div className="text-sm space-y-2" style={{ fontSize: '11px' }}>
-              <div className="flex justify-between">
-                <span className="font-bold">SUBTOTAL:</span>
-                <span>${invoiceData.subTotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-bold">TAX:</span>
-                <span>${taxAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-base" style={{ fontSize: '13px' }}>
-                <span>TOTAL:</span>
-                <span>${totalAmount.toFixed(2)}</span>
-              </div>
+          <div style={{ marginTop: '-5mm' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '4mm', paddingBottom: '2mm', borderBottom: '1px solid #e0e0e0' }}>
+              <span style={{ fontWeight: 'bold' }}>SUBTOTAL:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${invoiceData.subTotal.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '4mm', paddingBottom: '2mm', borderBottom: '1px solid #e0e0e0' }}>
+              <span style={{ fontWeight: 'bold' }}>TAX:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${taxAmount.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', fontWeight: 'bold', fontSize: '14px', marginTop: '2mm' }}>
+              <span>TOTAL:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${totalAmount.toFixed(2)}</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Divider Line */}
-      <div className="border-t border-black my-4"></div>
-
-      {/* Terms and Conditions Section */}
-      <div className="mb-6">
-        <h3 className="font-bold uppercase text-sm mb-2" style={{ fontSize: '11px' }}>
-          TERMS AND CONDITIONS
-        </h3>
-        <ul className="text-sm space-y-1 list-none pl-0" style={{ fontSize: '11px' }}>
-          <li>• Warranty covers only manufacturer defects.</li>
-          <li>• Damages due to misuse, power fluctuations, or accidents are not covered.</li>
-          <li>• Repairs due to such causes will be charged.</li>
-          <li>• Physical damage or corrosion voids the warranty.</li>
-          <li>• Goods once sold are non-returnable.</li>
-          <li>• Overdue payments are subject to bank interest rates.</li>
-        </ul>
-      </div>
-
-      {/* Divider Line */}
-      <div className="border-t border-black my-4"></div>
-
-      {/* Footer Section */}
-      <div className="text-center">
-        <div className="mb-4">
-          <div className="flex justify-between text-sm" style={{ fontSize: '11px' }}>
-            <div className="text-left">
-              <p className="font-bold">Date</p>
-              <p>{formatDate(new Date().toISOString().split('T')[0])}</p>
-            </div>
-            <div className="text-center">
-              <p className="font-bold">Authorized Signature</p>
-              <div style={{ height: '40px', marginTop: '10px' }}></div>
-            </div>
-            <div className="text-right">
-              <p>+123-456-7890</p>
-              <p>hello@realtygreatsite.com</p>
-              <p>www.realtygreatsite.com</p>
-            </div>
+        <div 
+          style={{
+            position: 'absolute',
+            top: '215mm',
+            left: '15mm',
+            right: '15mm',
+            height: '1px',
+            backgroundColor: '#000000',
+            borderTop: '1px solid #000000'
+          }}
+        />
+      
+        {/* Terms and Conditions */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '220mm',
+            left: '15mm',
+            right: '15mm',
+            fontSize: '10px',
+            color: '#000000',
+            lineHeight: '1.3' 
+          }}
+        >
+          <div style={{ fontWeight: 'bold', marginBottom: '2mm', fontSize: '11px' }}>
+            TERMS AND CONDITIONS
           </div>
+          <div style={{ marginBottom: '0.5mm' }}>• Warranty covers only manufacturer defects.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Damages due to misuse, power fluctuations, or accidents are not covered.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Repairs due to such causes will be charged.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Physical damage or corrosion voids the warranty.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Goods once sold are non-returnable.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Overdue payments are subject to bank interest rates.</div>
+          {invoiceData.notes && (
+            <>
+              <div style={{ marginTop: '2mm', fontWeight: 'bold' }}>Additional Notes:</div>
+              <div style={{ fontStyle: 'italic' }}>{invoiceData.notes}</div>
+            </>
+          )}
         </div>
+
         
-        <div className="text-xs mt-8" style={{ fontSize: '10px' }}>
-          <p>123 Anywhere St., Any City, ST 12345</p>
-        </div>
       </div>
     </div>
   );

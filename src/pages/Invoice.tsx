@@ -1,17 +1,52 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Plus, Save, Menu, X } from "lucide-react";
+import { User, FileText, Download, Printer, Save, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
-import type { InvoiceData, InvoiceItem, InvoiceCustomer } from "../types/invoice";
+import type { 
+  InvoiceData, 
+  InvoiceItem, 
+  InvoiceCustomer,
+  PaymentStatusType,
+  PaymentMethodType 
+} from "../types/invoice";
+import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
+import { invoiceService } from "../services/InvoiceService";
+import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import CustomAlert from "../components/CustomAlert";
+import ErrorBoundary from "../components/ErrorBoundary";
+
+interface BackendInvoiceData {
+  customer: InvoiceCustomer;
+  items: Array<{
+    item: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+  subTotal: number;
+  discount: number;
+  totalAmount: number;
+  paymentStatus: PaymentStatusType;
+  paymentMethod: PaymentMethodType;
+  issueDate: string;
+  dueDate: string;
+  bankDepositDate?: string;
+  notes?: string;
+  bankAccount?: string;
+  accountName?: string;
+}
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
+  const [isLoading, setIsLoading] = useState(false);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.7);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,6 +73,8 @@ const Invoice: React.FC = () => {
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     notes: "",
+    bankAccount: "12356587965497",
+    accountName: "YOUR NAME"
   });
 
   useEffect(() => {
@@ -55,7 +92,6 @@ const Invoice: React.FC = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  
   useEffect(() => {
     const calculateInitialScale = () => {
       if (rightPanelRef.current && !isMobileView) {
@@ -84,20 +120,32 @@ const Invoice: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, [isMobileView]);
 
-  // Generate invoice ID
+  // Load inventory items and generate next invoice ID
   useEffect(() => {
-    const generateNextInvoiceId = () => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      const invoiceId = `INV-${year}${month}${day}-${randomNum}`;
-      
-      setInvoiceData(prev => ({ ...prev, invoiceId }));
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load inventory items
+        const items = await inventoryService.getAll();
+        setInventoryItems(items as InvoiceInventoryItem[]);
+        
+        // Get next invoice ID from backend
+        const nextId = await invoiceService.getNextId();
+        setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
+        
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to load data'
+        });
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    generateNextInvoiceId();
+    loadData();
   }, []);
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
@@ -156,12 +204,12 @@ const Invoice: React.FC = () => {
     }));
   };
 
-  const handleFieldChange = (field: keyof InvoiceData, value: any) => {
+  const handleFieldChange = (field: keyof InvoiceData, value: string | number | boolean | Date) => {
     setInvoiceData(prev => {
       const updated = { ...prev, [field]: value };
       
       if (field === 'discount') {
-        const totalAmount = prev.subTotal - (value || 0);
+        const totalAmount = prev.subTotal - (Number(value) || 0);
         return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
       }
       
@@ -169,7 +217,7 @@ const Invoice: React.FC = () => {
     });
   };
 
-  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string | number) => {
+  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string | number | undefined) => {
     setInvoiceData(prev => ({
       ...prev,
       customer: {
@@ -179,25 +227,106 @@ const Invoice: React.FC = () => {
     }));
   };
 
-  const handleSaveInvoice = () => {
+  const handleSaveInvoice = async () => {
+    // Validate required fields
     if (!invoiceData.customer.name || !invoiceData.customer.email || !invoiceData.customer.phone) {
-      alert("Please fill in all required customer fields");
+      setAlert({
+        type: 'error',
+        message: "Please fill in all required customer fields"
+      });
       return;
     }
 
     if (invoiceData.items.length === 0) {
-      alert("Please add at least one item to the invoice");
+      setAlert({
+        type: 'error',
+        message: "Please add at least one item to the invoice"
+      });
       return;
     }
 
-    alert('Invoice saved successfully (frontend only)!');
-    console.log('Invoice data to save:', invoiceData);
+    try {
+      setIsLoading(true);
+      
+      const itemsForBackend = invoiceData.items.map(item => ({
+        item: item.item,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total
+      }));
+
+      const invoiceForBackend: BackendInvoiceData = {
+        customer: invoiceData.customer,
+        items: itemsForBackend,
+        subTotal: invoiceData.subTotal,
+        discount: invoiceData.discount,
+        totalAmount: invoiceData.totalAmount,
+        paymentStatus: invoiceData.paymentStatus,
+        paymentMethod: invoiceData.paymentMethod,
+        issueDate: new Date(invoiceData.issueDate).toISOString(),
+        dueDate: new Date(invoiceData.dueDate).toISOString(),
+        bankDepositDate: invoiceData.bankDepositDate 
+          ? new Date(invoiceData.bankDepositDate).toISOString()
+          : undefined,
+        notes: invoiceData.notes,
+        bankAccount: invoiceData.bankAccount,
+        accountName: invoiceData.accountName
+      };
+
+      const savedInvoice = await invoiceService.create(invoiceForBackend as Partial<InvoiceData>);
+      
+      setAlert({
+        type: 'success',
+        message: `Invoice ${savedInvoice.invoiceId} saved successfully!`
+      });
+
+      setInvoiceData(prev => ({
+        ...prev,
+        invoiceId: savedInvoice.invoiceId,
+        _id: savedInvoice._id
+      }));
+
+      // Get next invoice ID 
+      const nextId = await invoiceService.getNextId();
+      setInvoiceData(prev => ({ 
+        ...prev, 
+        invoiceId: nextId,
+        items: [],
+        subTotal: 0,
+        discount: 0,
+        totalAmount: 0,
+        customer: {
+          name: "",
+          email: "",
+          phone: "",
+          address: "",
+          vat_number: "",
+          vehicle_number: "",
+          vehicle_model: "",
+          year_of_manufacture: undefined,
+        }
+      }));
+
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save invoice'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const downloadPDF = async () => {
     if (!invoiceRef.current) return;
 
     try {
+      setAlert({
+        type: 'info',
+        message: 'Generating PDF...'
+      });
+
       const canvas = await html2canvas(invoiceRef.current, {
         scale: 3,
         useCORS: true,
@@ -224,9 +353,17 @@ const Invoice: React.FC = () => {
 
       pdf.addImage(imgData, 'PNG', 0, yOffset, imgWidth, imgHeight);
       pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
+
+      setAlert({
+        type: 'success',
+        message: 'PDF downloaded successfully!'
+      });
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      setAlert({
+        type: 'error',
+        message: 'Failed to generate PDF. Please try again.'
+      });
     }
   };
 
@@ -235,7 +372,10 @@ const Invoice: React.FC = () => {
 
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
-      alert("Popup blocked! Please allow popups for this site to print.");
+      setAlert({
+        type: 'error',
+        message: "Popup blocked! Please allow popups for this site to print."
+      });
       return;
     }
 
@@ -331,7 +471,17 @@ const Invoice: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Responsive Header */}
+        {/* Alert */}
+        {alert && (
+          <CustomAlert
+            type={alert.type}
+            message={alert.message}
+            onClose={() => setAlert(null)}
+            duration={5000}
+          />
+        )}
+
+        {/* Header */}
         <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 md:px-6 shadow-lg">
           <div className="flex items-center gap-3">
             {isMobileView && (
@@ -352,10 +502,17 @@ const Invoice: React.FC = () => {
             </div>
             <button
               onClick={handleSaveInvoice}
-              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base"
+              disabled={isLoading}
+              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-3 h-3 md:w-4 md:h-4" />
-              <span className="hidden sm:inline">Save</span>
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <Save className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">Save</span>
+                </>
+              )}
             </button>
             <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
@@ -386,14 +543,23 @@ const Invoice: React.FC = () => {
             ? (activePanel === 'form' ? 'w-full' : 'hidden') 
             : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
           >
-            <InvoiceForm
-              invoiceData={invoiceData}
-              onFieldChange={handleFieldChange}
-              onCustomerChange={handleCustomerChange}
-              onAddItem={handleAddItem}
-              onRemoveItem={handleRemoveItem}
-              onUpdateItem={handleUpdateItem}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+              </div>
+            ) : (
+              <ErrorBoundary>
+                <InvoiceForm
+                  invoiceData={invoiceData}
+                  onFieldChange={handleFieldChange}
+                  onCustomerChange={handleCustomerChange}
+                  onAddItem={handleAddItem}
+                  onRemoveItem={handleRemoveItem}
+                  onUpdateItem={handleUpdateItem}
+                  inventoryItems={inventoryItems}
+                />
+              </ErrorBoundary>
+            )}
           </div>
 
           {/* Right Panel - Canvas */}
@@ -410,14 +576,16 @@ const Invoice: React.FC = () => {
                 <div className="flex items-center justify-end sm:justify-start gap-2">
                   <button
                     onClick={downloadPDF}
-                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base"
+                    disabled={isLoading}
+                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download className="w-3 h-3 md:w-4 md:h-4" />
                     <span className="hidden sm:inline">PDF</span>
                   </button>
                   <button
                     onClick={handlePrint}
-                    className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base"
+                    disabled={isLoading}
+                    className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Printer className="w-3 h-3 md:w-4 md:h-4" />
                     <span className="hidden sm:inline">Print</span>
@@ -445,7 +613,9 @@ const Invoice: React.FC = () => {
                   backgroundColor: 'white'
                 }}
               >
-                <InvoiceCanvas invoiceData={invoiceData} />
+                <ErrorBoundary>
+                  <InvoiceCanvas invoiceData={invoiceData} />
+                </ErrorBoundary>
               </div>
             </div>
           </div>

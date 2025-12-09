@@ -36,18 +36,12 @@ export interface InvoiceItem {
   description?: string;
 }
 
-export interface InventoryItem {
-  _id: string;
-  itemId: string;
-  name: string;
-  description?: string;
-  category: string;
-  stock: number;
-  price: number;
-  unit: string;
-  reorderLevel: number;
-  createdAt: Date;
-  updatedAt: Date;
+export interface InvoiceItemBackend {
+  item: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  _id?: string;
 }
 
 export interface InvoiceData {
@@ -65,6 +59,41 @@ export interface InvoiceData {
   notes?: string;
   created_at?: string;
   updated_at?: string;
+  bankAccount?: string;
+  accountName?: string;
 }
 
-export type { InvoiceCustomer, InvoiceItem, InvoiceData, InventoryItem };
+export interface InvoiceResponse {
+  _id: string;
+  invoiceId: string;
+  customer: InvoiceCustomer;
+  items: Array<{
+    item: any;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+    _id?: string;
+  }>;
+  subTotal: number;
+  discount: number;
+  totalAmount: number;
+  paymentStatus: PaymentStatusType;
+  paymentMethod: PaymentMethodType;
+  bankDepositDate?: string;
+  issueDate: string;
+  dueDate: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SalesOverviewResponse {
+  period: string;
+  totalSales: number;
+  totalProducts: number;
+  weeklyData: Array<{
+    week: string;
+    sales: number;
+    products: number;
+  }>;
+}

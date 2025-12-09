@@ -1,84 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Search } from "lucide-react";
-import type { InvoiceData, InvoiceItem, InventoryItem } from "../types/invoice";
+import { Plus, Trash2, Search, AlertCircle } from "lucide-react";
+import type { InvoiceData, InvoiceItem } from "../types/invoice";
+import type { InventoryItem } from "../types/inventory"; 
 import { PaymentMethod, PaymentStatus } from "../types/invoice";
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
-  onFieldChange: (field: keyof InvoiceData, value: any) => void;
-  onCustomerChange: (field: keyof InvoiceData['customer'], value: string | number) => void;
+  onFieldChange: (field: keyof InvoiceData, value: string | number | boolean | Date) => void;
+  onCustomerChange: (field: keyof InvoiceData['customer'], value: string | number | undefined) => void;
   onAddItem: (item: Omit<InvoiceItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
+  inventoryItems: InventoryItem[];
 }
-
-const mockInventoryItems: InventoryItem[] = [
-  {
-    _id: "1",
-    itemId: "ITM-001",
-    name: "Engine Oil",
-    description: "Synthetic engine oil 5W-30",
-    category: "Lubricants",
-    stock: 50,
-    price: 45.99,
-    unit: "Liter",
-    reorderLevel: 10,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  },
-  {
-    _id: "2",
-    itemId: "ITM-002",
-    name: "Air Filter",
-    description: "High-performance air filter",
-    category: "Filters",
-    stock: 25,
-    price: 32.50,
-    unit: "Piece",
-    reorderLevel: 5,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  },
-  {
-    _id: "3",
-    itemId: "ITM-003",
-    name: "Brake Pads",
-    description: "Ceramic brake pads set",
-    category: "Brakes",
-    stock: 15,
-    price: 89.99,
-    unit: "Set",
-    reorderLevel: 3,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  },
-  {
-    _id: "4",
-    itemId: "ITM-004",
-    name: "Spark Plugs",
-    description: "Iridium spark plugs",
-    category: "Ignition",
-    stock: 40,
-    price: 18.75,
-    unit: "Piece",
-    reorderLevel: 8,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  },
-  {
-    _id: "5",
-    itemId: "ITM-005",
-    name: "Car Battery",
-    description: "12V 60Ah car battery",
-    category: "Electrical",
-    stock: 12,
-    price: 129.99,
-    unit: "Piece",
-    reorderLevel: 2,
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }
-];
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({
   invoiceData,
@@ -87,6 +21,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onAddItem,
   onRemoveItem,
   onUpdateItem,
+  inventoryItems,
 }) => {
   const [newItem, setNewItem] = useState<Omit<InvoiceItem, 'id' | 'total'>>({
     item: "",
@@ -95,44 +30,72 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     itemName: "",
   });
 
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(mockInventoryItems);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [itemTotal, setItemTotal] = useState(0);
+  const [stockWarning, setStockWarning] = useState<string | null>(null);
 
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
-  }, [newItem.quantity, newItem.unitPrice]);
+    
+    // Check stock availability
+    if (newItem.item) {
+      const selectedItem = inventoryItems.find(item => item.id === newItem.item);
+      if (selectedItem && newItem.quantity > selectedItem.quantity) {
+        setStockWarning(`Only ${selectedItem.quantity} items in stock`);
+      } else {
+        setStockWarning(null);
+      }
+    }
+  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems]);
 
   useEffect(() => {
-    if (searchTerm.length < 2) {
+    if (searchTerm.trim().length < 2) {
       setFilteredItems([]);
       return;
     }
 
-    const filtered = inventoryItems.filter(item =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.itemId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const searchTermLower = searchTerm.toLowerCase().trim();
+    const filtered = inventoryItems.filter(item => {
+      // Check product_name
+      if (item.product_name && item.product_name.toLowerCase().includes(searchTermLower)) return true;
+      
+      // Check product_code
+      if (item.product_code && item.product_code.toLowerCase().includes(searchTermLower)) return true;
+      
+      // Check vehicle brand/model
+      if (item.vehicle?.brand && item.vehicle.brand.toLowerCase().includes(searchTermLower)) return true;
+      if (item.vehicle?.model && item.vehicle.model.toLowerCase().includes(searchTermLower)) return true;
+      
+      return false;
+    });
+    
     setFilteredItems(filtered);
   }, [searchTerm, inventoryItems]);
 
   const handleItemSelect = (inventoryItem: InventoryItem) => {
     setNewItem({
-      item: inventoryItem._id,
-      itemName: inventoryItem.name,
+      item: inventoryItem.id,
+      itemName: inventoryItem.product_name,
       quantity: 1,
-      unitPrice: inventoryItem.price,
+      unitPrice: inventoryItem.sell_price,
     });
-    setSearchTerm(`${inventoryItem.name} (${inventoryItem.itemId})`);
+    setSearchTerm(`${inventoryItem.product_name} (${inventoryItem.product_code})`);
     setShowSuggestions(false);
+    setStockWarning(null);
   };
 
   const handleAddItem = () => {
     if (!newItem.item || newItem.quantity <= 0 || newItem.unitPrice < 0) {
       alert("Please select an item and fill all required fields");
+      return;
+    }
+
+    // Check stock availability
+    const selectedItem = inventoryItems.find(item => item.id === newItem.item);
+    if (selectedItem && newItem.quantity > selectedItem.quantity) {
+      alert(`Cannot add ${newItem.quantity} items. Only ${selectedItem.quantity} in stock.`);
       return;
     }
 
@@ -145,7 +108,34 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     });
     setSearchTerm("");
     setItemTotal(0);
+    setStockWarning(null);
   };
+
+  const handleUpdateItemQuantity = (id: string, newQuantity: number) => {
+    const item = invoiceData.items.find(item => item.id === id);
+    if (item) {
+      const inventoryItem = inventoryItems.find(inv => inv.id === item.item);
+      if (inventoryItem && newQuantity > inventoryItem.quantity) {
+        alert(`Cannot update to ${newQuantity} items. Only ${inventoryItem.quantity} in stock.`);
+        return;
+      }
+      onUpdateItem(id, { quantity: newQuantity });
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.search-container')) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -164,10 +154,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               onChange={(e) => onCustomerChange('name', e.target.value)}
               placeholder="Customer Name"
               className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Customer Email*
@@ -178,6 +169,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 onChange={(e) => onCustomerChange('email', e.target.value)}
                 placeholder="customer@email.com"
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               />
             </div>
             <div>
@@ -190,6 +182,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 onChange={(e) => onCustomerChange('phone', e.target.value)}
                 placeholder="+94 XXX XXX XXX"
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               />
             </div>
           </div>
@@ -208,7 +201,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           </div>
 
           {/* Customer Additional Fields */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 VAT Number
@@ -235,7 +228,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Vehicle Model
@@ -255,7 +248,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               <input
                 type="number"
                 value={invoiceData.customer.year_of_manufacture || ''}
-                onChange={(e) => onCustomerChange('year_of_manufacture', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                  onCustomerChange('year_of_manufacture', value);
+                }}
                 placeholder="Year"
                 min="1900"
                 max={new Date().getFullYear() + 1}
@@ -265,7 +261,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           </div>
 
           {/* Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Issue Date*
@@ -275,6 +271,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 value={invoiceData.issueDate}
                 onChange={(e) => onFieldChange('issueDate', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               />
             </div>
             <div>
@@ -286,27 +283,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 value={invoiceData.dueDate}
                 onChange={(e) => onFieldChange('dueDate', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               />
             </div>
           </div>
 
-          {/* Discount */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Discount
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={invoiceData.discount}
-              onChange={(e) => onFieldChange('discount', parseFloat(e.target.value) || 0)}
-              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
           {/* Payment Information */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Payment Method*
@@ -315,6 +298,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 value={invoiceData.paymentMethod}
                 onChange={(e) => onFieldChange('paymentMethod', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               >
                 {Object.values(PaymentMethod).map(method => (
                   <option key={method} value={method}>{method}</option>
@@ -329,6 +313,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 value={invoiceData.paymentStatus}
                 onChange={(e) => onFieldChange('paymentStatus', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               >
                 {Object.values(PaymentStatus).map(status => (
                   <option key={status} value={status}>{status}</option>
@@ -350,6 +335,21 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               />
             </div>
           )}
+
+          {/* Discount */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Discount ($)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={invoiceData.discount}
+              onChange={(e) => onFieldChange('discount', parseFloat(e.target.value) || 0)}
+              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -357,7 +357,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
         <h3 className="text-lg font-semibold text-gray-200 mb-4">Add Item</h3>
         
-        <div className="space-y-4">
+        <div className="space-y-4 search-container">
           {/* Item Search */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -369,36 +369,63 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setShowSuggestions(true);
+                  const value = e.target.value;
+                  setSearchTerm(value);
+                  if (value.trim().length >= 2) {
+                    setShowSuggestions(true);
+                  } else {
+                    setShowSuggestions(false);
+                  }
                 }}
-                onFocus={() => setShowSuggestions(true)}
+                onFocus={() => {
+                  if (searchTerm.trim().length >= 2 && filteredItems.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
                 placeholder="Type to search items..."
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg pl-10 pr-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               
               {/* Search Suggestions Dropdown */}
-              {showSuggestions && searchTerm.length >= 2 && (
+              {showSuggestions && searchTerm.trim().length >= 2 && (
                 <div className="absolute z-10 w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {filteredItems.length === 0 ? (
-                    <div className="px-3 py-2 text-gray-400 text-sm">No items found</div>
+                    <div className="px-3 py-2 text-gray-400 text-sm italic">
+                      No items found matching "{searchTerm}"
+                    </div>
                   ) : (
                     filteredItems.map((item) => (
                       <div
-                        key={item._id}
-                        className="px-3 py-2 hover:bg-[#1e293b] cursor-pointer border-b border-[#334155] last:border-b-0"
+                        key={item.id}
+                        className="px-3 py-2 hover:bg-[#1e293b] cursor-pointer border-b border-[#334155] last:border-b-0 transition-colors duration-150"
                         onClick={() => handleItemSelect(item)}
                       >
-                        <div className="font-medium text-white">{item.name}</div>
-                        <div className="text-sm text-gray-400 flex justify-between">
-                          <span>ID: {item.itemId}</span>
-                          <span className="text-green-400">${item.price.toFixed(2)}</span>
+                        <div className="font-medium text-white">{item.product_name || 'Unnamed Item'}</div>
+                        <div className="text-sm text-gray-400 flex justify-between mt-1">
+                          <span>Code: {item.product_code || 'N/A'}</span>
+                          <span className="text-green-400">${(item.sell_price || 0).toFixed(2)}</span>
                         </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs text-gray-500">
+                            Stock: {item.quantity || 0} units
+                          </span>
+                          <span className="text-xs text-blue-400">
+                            Status: {item.status || 'N/A'}
+                          </span>
+                        </div>
+                        {item.vehicle && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Vehicle: {item.vehicle.brand} {item.vehicle.model} ({item.vehicle.year})
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
                 </div>
               )}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Search by product name, code, or vehicle brand/model
             </div>
           </div>
 
@@ -412,6 +439,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                     setNewItem({ item: "", quantity: 1, unitPrice: 0, itemName: "" });
                     setSearchTerm("");
                     setItemTotal(0);
+                    setStockWarning(null);
                   }}
                   className="text-red-400 hover:text-red-300 text-sm"
                 >
@@ -419,7 +447,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 </button>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <div className="text-sm text-gray-400 mb-1">Item Name</div>
                   <div className="font-medium text-white">{newItem.itemName}</div>
@@ -433,11 +461,18 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                   <div className="font-medium text-blue-400">Ready to Add</div>
                 </div>
               </div>
+              
+              {stockWarning && (
+                <div className="mt-3 p-2 bg-yellow-900/30 border border-yellow-700 rounded flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-300 text-sm">{stockWarning}</span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Quantity and Total */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Quantity*
@@ -502,42 +537,75 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
           </div>
           <div className="space-y-3">
-            {invoiceData.items.map((item) => (
-              <div key={item.id} className="bg-[#0f172a] p-4 rounded-lg border border-[#334155]">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-medium text-gray-200">{item.itemName || `Item ${item.item.substring(0, 8)}...`}</h4>
-                        <div className="text-sm text-gray-400">ID: {item.item.substring(0, 12)}...</div>
+            {invoiceData.items.map((item) => {
+              const inventoryItem = inventoryItems.find(inv => inv.id === item.item);
+              return (
+                <div key={item.id} className="bg-[#0f172a] p-4 rounded-lg border border-[#334155]">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-medium text-gray-200">{item.itemName || inventoryItem?.product_name || `Item ${item.item.substring(0, 8)}...`}</h4>
+                          <div className="text-sm text-gray-400">Code: {inventoryItem?.product_code || item.item.substring(0, 12)}...</div>
+                          {inventoryItem && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Stock: {inventoryItem.quantity || 0} units
+                              {item.quantity > (inventoryItem.quantity || 0) && (
+                                <span className="text-red-400 ml-2">(Insufficient stock!)</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => onRemoveItem(item.id)}
+                          className="text-red-400 hover:text-red-300 ml-4"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => onRemoveItem(item.id)}
-                        className="text-red-400 hover:text-red-300 ml-4"
-                        title="Remove item"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div className="text-gray-400">
-                        <div>Quantity</div>
-                        <div className="text-white font-medium">{item.quantity}</div>
-                      </div>
-                      <div className="text-gray-400">
-                        <div>Unit Price</div>
-                        <div className="text-white font-medium">${item.unitPrice.toFixed(2)}</div>
-                      </div>
-                      <div className="text-gray-400">
-                        <div>Total</div>
-                        <div className="text-green-400 font-semibold">${item.total.toFixed(2)}</div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="text-gray-400">
+                          <div>Quantity</div>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                            className="w-full bg-[#1e293b] border border-[#334155] rounded px-2 py-1 text-white mt-1"
+                          />
+                        </div>
+                        <div className="text-gray-400">
+                          <div>Unit Price</div>
+                          <div className="text-white font-medium">${item.unitPrice.toFixed(2)}</div>
+                        </div>
+                        <div className="text-gray-400">
+                          <div>Total</div>
+                          <div className="text-green-400 font-semibold">${item.total.toFixed(2)}</div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+          
+          {/* Summary */}
+          <div className="mt-6 pt-4 border-t border-[#334155]">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-300">Subtotal:</span>
+              <span className="text-white font-medium">${invoiceData.subTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-300">Discount:</span>
+              <span className="text-red-400 font-medium">-${invoiceData.discount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-lg font-semibold pt-2 border-t border-[#334155]">
+              <span className="text-gray-200">Total Amount:</span>
+              <span className="text-green-400">${invoiceData.totalAmount.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       )}
