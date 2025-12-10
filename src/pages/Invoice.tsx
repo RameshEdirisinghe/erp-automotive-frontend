@@ -1,29 +1,69 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer } from "lucide-react";
+import { User, FileText, Download, Printer, Save, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
-import type { InvoiceData, InvoiceItem, InvoiceCustomer } from "../types/invoice";
+import type { 
+  InvoiceData, 
+  InvoiceItem, 
+  InvoiceCustomer,
+  PaymentStatusType,
+  PaymentMethodType 
+} from "../types/invoice";
+import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
+import { invoiceService } from "../services/InvoiceService";
+import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import CustomAlert from "../components/CustomAlert";
+import ErrorBoundary from "../components/ErrorBoundary";
+
+interface BackendInvoiceData {
+  customer: InvoiceCustomer;
+  items: Array<{
+    item: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
+  subTotal: number;
+  discount: number;
+  totalAmount: number;
+  paymentStatus: PaymentStatusType;
+  paymentMethod: PaymentMethodType;
+  issueDate: string;
+  dueDate: string;
+  bankDepositDate?: string;
+  notes?: string;
+  bankAccount?: string;
+  accountName?: string;
+}
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
+  const [isLoading, setIsLoading] = useState(false);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.7);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
 
   const [invoiceData, setInvoiceData] = useState<InvoiceData>({
-    invoiceId: "INV-" + new Date().toISOString().split('T')[0].replace(/-/g, '') + "-0001",
+    invoiceId: "",
     customer: {
       name: "",
       email: "",
       phone: "",
-      address: ""
+      address: "",
+      vat_number: "",
+      vehicle_number: "",
+      vehicle_model: "",
+      year_of_manufacture: undefined,
     },
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    salesPerson: "",
-    documentType: "INVOICE",
-    taxMode: "Non-Tax",
     items: [],
     subTotal: 0,
     discount: 0,
@@ -31,41 +71,113 @@ const Invoice: React.FC = () => {
     paymentStatus: PaymentStatus.PENDING,
     paymentMethod: PaymentMethod.CASH,
     issueDate: new Date().toISOString().split('T')[0],
-    bankDepositDate: undefined,
-    notes: ""
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    notes: "",
+    bankAccount: "12356587965497",
+    accountName: "YOUR NAME"
   });
 
-  const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total' | 'item'>) => {
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      setIsMobileView(width < 1024); 
+      if (width < 1024) {
+        setActivePanel('form');
+      }
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  useEffect(() => {
+    const calculateInitialScale = () => {
+      if (rightPanelRef.current && !isMobileView) {
+        const panelWidth = rightPanelRef.current.clientWidth;
+        const panelHeight = rightPanelRef.current.clientHeight;
+        const a4Width = 210 * 3.78;
+        const a4Height = 297 * 3.78;
+        
+        const availableWidth = panelWidth - (isMobileView ? 24 : 48);
+        const availableHeight = panelHeight - (isMobileView ? 100 : 120);
+        
+        const widthScale = availableWidth / a4Width;
+        const heightScale = availableHeight / a4Height;
+        
+        const calculatedScale = Math.min(widthScale, heightScale);
+        setScale(Math.max(calculatedScale, isMobileView ? 0.2 : 0.3));
+      }
+    };
+
+    calculateInitialScale();
+    const resizeObserver = new ResizeObserver(calculateInitialScale);
+    if (rightPanelRef.current) {
+      resizeObserver.observe(rightPanelRef.current);
+    }
+    
+    return () => resizeObserver.disconnect();
+  }, [isMobileView]);
+
+  // Load inventory items and generate next invoice ID
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load inventory items
+        const items = await inventoryService.getAll();
+        setInventoryItems(items as InvoiceInventoryItem[]);
+        
+        // Get next invoice ID from backend
+        const nextId = await invoiceService.getNextId();
+        setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
+        
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to load data'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
-    const newItem = {
+    const newItem: InvoiceItem = {
       ...item,
       id: Date.now().toString(),
-      item: Date.now().toString(), 
       total
     };
 
     const newItems = [...invoiceData.items, newItem];
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = invoiceData.taxMode === "Tax" ? subTotal * 1.18 : subTotal;
+    const totalAmount = subTotal - (invoiceData.discount || 0);
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
-      totalAmount
+      totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
 
   const handleRemoveItem = (id: string) => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = invoiceData.taxMode === "Tax" ? subTotal * 1.18 : subTotal;
+    const totalAmount = subTotal - (invoiceData.discount || 0);
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
-      totalAmount
+      totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
 
@@ -82,30 +194,30 @@ const Invoice: React.FC = () => {
     });
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = invoiceData.taxMode === "Tax" ? subTotal * 1.18 : subTotal;
+    const totalAmount = subTotal - (invoiceData.discount || 0);
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
-      totalAmount
+      totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
 
-  const handleFieldChange = (field: keyof InvoiceData, value: any) => {
+  const handleFieldChange = (field: keyof InvoiceData, value: string | number | boolean | Date) => {
     setInvoiceData(prev => {
       const updated = { ...prev, [field]: value };
       
-      if (field === 'taxMode') {
-        const totalAmount = value === "Tax" ? prev.subTotal * 1.18 : prev.subTotal;
-        return { ...updated, totalAmount };
+      if (field === 'discount') {
+        const totalAmount = prev.subTotal - (Number(value) || 0);
+        return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
       }
       
       return updated;
     });
   };
 
-  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string) => {
+  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string | number | undefined) => {
     setInvoiceData(prev => ({
       ...prev,
       customer: {
@@ -115,43 +227,159 @@ const Invoice: React.FC = () => {
     }));
   };
 
+  const handleSaveInvoice = async () => {
+    // Validate required fields
+    if (!invoiceData.customer.name || !invoiceData.customer.email || !invoiceData.customer.phone) {
+      setAlert({
+        type: 'error',
+        message: "Please fill in all required customer fields"
+      });
+      return;
+    }
+
+    if (invoiceData.items.length === 0) {
+      setAlert({
+        type: 'error',
+        message: "Please add at least one item to the invoice"
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      const itemsForBackend = invoiceData.items.map(item => ({
+        item: item.item,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total
+      }));
+
+      const invoiceForBackend: BackendInvoiceData = {
+        customer: invoiceData.customer,
+        items: itemsForBackend,
+        subTotal: invoiceData.subTotal,
+        discount: invoiceData.discount,
+        totalAmount: invoiceData.totalAmount,
+        paymentStatus: invoiceData.paymentStatus,
+        paymentMethod: invoiceData.paymentMethod,
+        issueDate: new Date(invoiceData.issueDate).toISOString(),
+        dueDate: new Date(invoiceData.dueDate).toISOString(),
+        bankDepositDate: invoiceData.bankDepositDate 
+          ? new Date(invoiceData.bankDepositDate).toISOString()
+          : undefined,
+        notes: invoiceData.notes,
+        bankAccount: invoiceData.bankAccount,
+        accountName: invoiceData.accountName
+      };
+
+      const savedInvoice = await invoiceService.create(invoiceForBackend as Partial<InvoiceData>);
+      
+      setAlert({
+        type: 'success',
+        message: `Invoice ${savedInvoice.invoiceId} saved successfully!`
+      });
+
+      setInvoiceData(prev => ({
+        ...prev,
+        invoiceId: savedInvoice.invoiceId,
+        _id: savedInvoice._id
+      }));
+
+      // Get next invoice ID 
+      const nextId = await invoiceService.getNextId();
+      setInvoiceData(prev => ({ 
+        ...prev, 
+        invoiceId: nextId,
+        items: [],
+        subTotal: 0,
+        discount: 0,
+        totalAmount: 0,
+        customer: {
+          name: "",
+          email: "",
+          phone: "",
+          address: "",
+          vat_number: "",
+          vehicle_number: "",
+          vehicle_model: "",
+          year_of_manufacture: undefined,
+        }
+      }));
+
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save invoice'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const downloadPDF = async () => {
     if (!invoiceRef.current) return;
 
-    const canvas = await html2canvas(invoiceRef.current, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      width: 794, 
-      height: 1123,
-      windowWidth: 794,
-      windowHeight: 1123
-    });
+    try {
+      setAlert({
+        type: 'info',
+        message: 'Generating PDF...'
+      });
 
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
+      const canvas = await html2canvas(invoiceRef.current, {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123
+      });
 
-    const imgWidth = 210;
-    const pageHeight = 295;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
 
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
+      const pageHeight = 297;
+      const yOffset = (pageHeight - imgHeight) / 2;
+
+      pdf.addImage(imgData, 'PNG', 0, yOffset, imgWidth, imgHeight);
+      pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
+
+      setAlert({
+        type: 'success',
+        message: 'PDF downloaded successfully!'
+      });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to generate PDF. Please try again.'
+      });
+    }
   };
 
   const handlePrint = () => {
     if (!invoiceRef.current) return;
 
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
-      alert("Popup blocked! Please allow popups for this site to print.");
+      setAlert({
+        type: 'error',
+        message: "Popup blocked! Please allow popups for this site to print."
+      });
       return;
     }
+
+    const invoiceContent = invoiceRef.current.innerHTML;
 
     const printContent = `
       <!DOCTYPE html>
@@ -159,43 +387,83 @@ const Invoice: React.FC = () => {
         <head>
           <title>Invoice ${invoiceData.invoiceId}</title>
           <style>
-            body { 
-              margin: 0; 
-              padding: 0; 
-              font-family: Arial, sans-serif;
-              -webkit-print-color-adjust: exact;
-              color-adjust: exact;
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+            
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
             }
+            
+            body {
+              font-family: 'Inter', Arial, sans-serif;
+              background: white;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            .invoice-container {
+              width: 210mm;
+              min-height: 297mm;
+              margin: 0 auto;
+              padding: 15mm;
+              background: white;
+              font-size: 12px;
+              line-height: 1.4;
+              position: relative;
+            }
+            
+            @page {
+              size: A4;
+              margin: 0;
+            }
+            
             @media print {
-              @page {
-                size: A4;
+              body {
                 margin: 0;
-              }
-              body { 
-                margin: 0; 
                 padding: 0;
                 width: 210mm;
                 height: 297mm;
               }
+              
+              .invoice-container {
+                margin: 0;
+                padding: 15mm;
+                width: 210mm;
+                min-height: 297mm;
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+            }
+            
+            img {
+              max-width: 100%;
+              height: auto;
             }
           </style>
         </head>
         <body>
-          ${invoiceRef.current.innerHTML}
+          <div class="invoice-container">
+            ${invoiceContent}
+          </div>
+          <script>
+            window.onload = function() {
+              window.focus();
+              setTimeout(function() {
+                window.print();
+                setTimeout(function() {
+                  window.close();
+                }, 500);
+              }, 250);
+            };
+          </script>
         </body>
       </html>
     `;
 
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
-    printWindow.onload = () => {
-      printWindow.focus();
-      printWindow.print();
-      printWindow.onafterprint = () => {
-        printWindow.close();
-      };
-    };
   };
 
   return (
@@ -203,56 +471,152 @@ const Invoice: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
+        {/* Alert */}
+        {alert && (
+          <CustomAlert
+            type={alert.type}
+            message={alert.message}
+            onClose={() => setAlert(null)}
+            duration={5000}
+          />
+        )}
+
+        {/* Header */}
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 md:px-6 shadow-lg">
           <div className="flex items-center gap-3">
-            <FileText className="text-blue-400 w-6 h-6" />
-            <h1 className="text-xl font-semibold text-gray-200">Invoice Management</h1>
+            {isMobileView && (
+              <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="p-2 rounded-lg hover:bg-[#0f172a] transition"
+              >
+                {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            )}
+            <FileText className="text-blue-400 w-5 h-5 md:w-6 md:h-6" />
+            <h1 className="text-lg md:text-xl font-semibold text-gray-200">Invoice Management</h1>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
-              <User className="text-gray-200 w-5 h-5" />
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
+              Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
+            </div>
+            <button
+              onClick={handleSaveInvoice}
+              disabled={isLoading}
+              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <Save className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">Save</span>
+                </>
+              )}
+            </button>
+            <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
+              <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
           </div>
         </div>
 
+        {isMobileView && (
+          <div className="flex border-b border-[#334155] bg-[#1e293b]">
+            <button
+              onClick={() => setActivePanel('form')}
+              className={`flex-1 py-3 text-center font-medium ${activePanel === 'form' ? 'bg-[#0f172a] text-blue-400' : 'text-gray-300 hover:text-white'}`}
+            >
+              Form
+            </button>
+            <button
+              onClick={() => setActivePanel('preview')}
+              className={`flex-1 py-3 text-center font-medium ${activePanel === 'preview' ? 'bg-[#0f172a] text-blue-400' : 'text-gray-300 hover:text-white'}`}
+            >
+              Preview
+            </button>
+          </div>
+        )}
+
         <div className="flex-1 flex overflow-hidden">
-          {/* Form */}
-          <div className="w-1/2 p-6 overflow-y-auto">
-            <InvoiceForm
-              invoiceData={invoiceData}
-              onFieldChange={handleFieldChange}
-              onCustomerChange={handleCustomerChange}
-              onAddItem={handleAddItem}
-              onRemoveItem={handleRemoveItem}
-              onUpdateItem={handleUpdateItem}
-            />
+          {/* Left Panel - Form */}
+          <div className={`${isMobileView 
+            ? (activePanel === 'form' ? 'w-full' : 'hidden') 
+            : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+              </div>
+            ) : (
+              <ErrorBoundary>
+                <InvoiceForm
+                  invoiceData={invoiceData}
+                  onFieldChange={handleFieldChange}
+                  onCustomerChange={handleCustomerChange}
+                  onAddItem={handleAddItem}
+                  onRemoveItem={handleRemoveItem}
+                  onUpdateItem={handleUpdateItem}
+                  inventoryItems={inventoryItems}
+                />
+              </ErrorBoundary>
+            )}
           </div>
 
-          {/* Canvas */}
-          <div className="w-1/2 bg-white p-6 overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Invoice Preview</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={downloadPDF}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-                >
-                  <Download className="w-4 h-4" />
-                  Download PDF
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print
-                </button>
+          {/* Right Panel - Canvas */}
+          <div 
+            ref={rightPanelRef}
+            className={`${isMobileView 
+              ? (activePanel === 'preview' ? 'w-full' : 'hidden') 
+              : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
+          >
+            {/* Header with controls */}
+            <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                <h2 className="text-base md:text-lg font-semibold text-gray-800">Invoice Preview</h2>
+                <div className="flex items-center justify-end sm:justify-start gap-2">
+                  <button
+                    onClick={downloadPDF}
+                    disabled={isLoading}
+                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">PDF</span>
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    disabled={isLoading}
+                    className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Printer className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">Print</span>
+                  </button>
+                </div>
               </div>
             </div>
-            
-            <div ref={invoiceRef}>
-              <InvoiceCanvas invoiceData={invoiceData} />
+
+            {/* Canvas Container */}
+            <div 
+              ref={containerRef}
+              className="flex-1 overflow-hidden bg-white flex items-center justify-center p-2 md:p-4"
+            >
+              <div
+                ref={invoiceRef}
+                style={{
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'center',
+                  width: '210mm',
+                  minHeight: '297mm',
+                  transition: 'transform 0.15s ease-out',
+                  boxShadow: isMobileView 
+                    ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
+                    : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                  backgroundColor: 'white'
+                }}
+              >
+                <ErrorBoundary>
+                  <InvoiceCanvas invoiceData={invoiceData} />
+                </ErrorBoundary>
+              </div>
             </div>
           </div>
         </div>
