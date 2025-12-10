@@ -1,6 +1,6 @@
 import React from "react";
 import type { InvoiceData } from "../types/invoice";
-import { PaymentMethod, PaymentStatus } from "../types/invoice";
+import InvoiceTemplate from "../assets/Business invoice Template.jpg";
 
 interface InvoiceCanvasProps {
   invoiceData: InvoiceData;
@@ -8,203 +8,386 @@ interface InvoiceCanvasProps {
 
 const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateString.split('T')[0] || "02/05/2025";
+    }
   };
 
-  const calculateTaxAmount = () => {
-    return invoiceData.taxMode === "Tax" ? invoiceData.subTotal * 0.18 : 0;
+  // Calculate tax 
+  const calculateTax = () => {
+    return invoiceData.subTotal * (20/70); 
   };
 
-  const calculateFinalTotal = () => {
-    const taxAmount = calculateTaxAmount();
-    return invoiceData.subTotal + taxAmount - invoiceData.discount;
+  const taxAmount = calculateTax();
+  const totalAmount = invoiceData.subTotal + taxAmount;
+
+  const getRowColor = (index: number) => {
+    return index % 2 === 0 ? '#f5f5f5' : '#ffffff';
   };
 
   return (
-    <div 
-      className="bg-white text-gray-800 p-8 shadow-lg mx-auto print:shadow-none print:p-0"
-      style={{ 
-        width: '210mm', 
-        minHeight: '297mm',
-        pageBreakInside: 'avoid'
-      }}
-    >
-      {/* Header */}
-      <div className="flex justify-between items-start mb-8 border-b pb-4">
-        <div>
-          <h2 className="text-xl font-semibold mb-2">xxxxxxxxx</h2>
-          <div className="text-sm text-gray-600">
-            <p>No. xx, xxxxxxx,</p>
-            <p>xxxxxx</p>
-            <p>+xx xxx xxx xxx</p>
-            <p>VAT xxxxxxx-xxxx</p>
-          </div>
-        </div>
-        
-        {/* Invoice details */}
-        <div className="text-right">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{invoiceData.documentType}</h1>
-          <div className="text-sm text-gray-600">
-            <p><strong>Invoice ID:</strong> {invoiceData.invoiceId}</p>
-            <p><strong>Tax Mode:</strong> {invoiceData.taxMode}</p>
-          </div>
-        </div>
-      </div>
+    <div className="relative" style={{ width: '210mm', height: '297mm' }}>
+      {/* Background Template Image */}
+      <img 
+        src={InvoiceTemplate} 
+        alt="Invoice Template Background"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1
+        }}
+      />
 
-      {/* Customer and Invoice Details */}
-      <div className="grid grid-cols-2 gap-8 mb-6">
-        <div>
-          <h3 className="font-semibold mb-1 text-lg">BILL TO:</h3>
-          <div className="text-sm p-3">
-            <p className="font-medium text-lg">{invoiceData.customer.name}</p>
-            <p className="text-gray-600 mt-1">{invoiceData.customer.email}</p>
-            <p className="text-gray-600 mt-1">{invoiceData.customer.phone}</p>
-            {invoiceData.customer.address && (
-              <p className="text-gray-600 mt-1">{invoiceData.customer.address}</p>
-            )}
+      {/* Invoice Content Overlay */}
+      <div 
+        className="relative z-10"
+        style={{
+          padding: '15mm',
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          color: '#000000',
+          fontSize: '12px',
+          lineHeight: '1.4',
+          fontFamily: 'Arial, sans-serif'
+        }}
+      >
+ 
+        {/* Customer Name */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '54mm',
+            left: '15mm',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            color: '#000000'
+          }}
+        >
+          {invoiceData.customer.name || "Name Surname"}
+        </div>
+
+        {/* Customer Details */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '60mm',
+            left: '15mm',
+            fontSize: '11px',
+            color: '#494949ff',
+            lineHeight: '1.5'
+          }}
+        >
+          <div>{formatDate(invoiceData.issueDate)}</div>
+          <div>{invoiceData.customer.address || "123 Anywhere St., Any City"}</div>
+          <div>{invoiceData.customer.email || "hello@realtygreatsite.com"}</div>
+          <div>{invoiceData.customer.phone || "+123-456-7890"}</div>
+        </div>
+
+        {/* INVOICE */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '60mm',
+            right: '15mm',
+            fontSize: '11px',
+            color: '#000000',
+            textAlign: 'left'
+          }}
+        >
+          INVOICE
+        </div>
+
+        {/* Invoice Number */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '65mm',
+            right: '15mm',
+            fontSize: '13px',
+            color: '#000000',
+            textAlign: 'right'
+          }}
+        >
+          #{invoiceData.invoiceId || "0000000"}
+        </div>
+
+        <div 
+          style={{
+            position: 'absolute',
+            top: '82mm',
+            left: '15mm',
+            right: '15mm',
+            height: '1px',
+            backgroundColor: '#000000',
+            borderTop: '1px solid #000000'
+          }}
+        />
+
+        {/* Table Header */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '88mm',
+            left: '15mm',
+            right: '15mm',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: '#ffffff',
+            display: 'grid',
+            gridTemplateColumns: '60% 13% 13% 14%',
+            backgroundColor: '#2e2d2dff',
+            padding: '3mm 2mm',
+            alignItems: 'center'
+          }}
+        >
+          <div style={{ 
+            paddingLeft: '2mm', 
+            display: 'flex', 
+            alignItems: 'center',
+            height: '100%'
+          }}>
+            DESCRIPTION
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            PRICE
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            QTY
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            TOTAL
           </div>
         </div>
-        
-        <div>
-          <div className="grid grid-cols-1 gap-2 text-sm">
-            <div className="flex justify-between">
-              <span className="font-semibold">Invoice Date:</span>
-              <span>{formatDate(invoiceData.issueDate)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold">Due Date:</span>
-              <span>{formatDate(invoiceData.dueDate)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold">Sales Person:</span>
-              <span>{invoiceData.salesPerson || "Probable"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold">Payment Method:</span>
-              <span>{invoiceData.paymentMethod}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-semibold">Payment Status:</span>
-              <span className={`font-medium ${
-                invoiceData.paymentStatus === PaymentStatus.COMPLETED ? 'text-green-600' :
-                invoiceData.paymentStatus === PaymentStatus.REJECTED ? 'text-red-600' :
-                'text-yellow-600'
-              }`}>
-                {invoiceData.paymentStatus}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Items Table */}
-      <div className="mb-8">
-        <table className="w-full border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold">DESCRIPTION</th>
-              <th className="border border-gray-300 px-4 py-3 text-center font-semibold">QTY</th>
-              <th className="border border-gray-300 px-4 py-3 text-right font-semibold">UNIT PRICE</th>
-              <th className="border border-gray-300 px-4 py-3 text-right font-semibold">AMOUNT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoiceData.items.map((item) => (
-              <tr key={item.id}>
-                <td className="border border-gray-300 px-4 py-3">
-                  <div>
-                    <p className="font-medium">{item.itemName}</p>
-                    <p className="text-sm text-gray-600">{item.description}</p>
-                    <p className="text-sm text-gray-600">Serial: {item.serialNumber}</p>
-                    <p className="text-sm text-gray-600">FQ No: {item.fqNo}</p>
-                    {item.additionalDescription && (
-                      <p className="text-sm text-gray-600 mt-1">{item.additionalDescription}</p>
-                    )}
-                  </div>
-                </td>
-                <td className="border border-gray-300 px-4 py-3 text-center">{item.quantity}</td>
-                <td className="border border-gray-300 px-4 py-3 text-right">${item.unitPrice.toFixed(2)}</td>
-                <td className="border border-gray-300 px-4 py-3 text-right">${item.total.toFixed(2)}</td>
-              </tr>
-            ))}
-            {invoiceData.items.length === 0 && (
-              <tr>
-                <td colSpan={4} className="border border-gray-300 px-4 py-8 text-center text-gray-500">
-                  No items added
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Totals */}
-      <div className="flex justify-end mb-8">
-        <div className="w-80">
-          <div className="flex justify-between py-2 border-b">
-            <span className="font-semibold">Sub Total:</span>
-            <span>${invoiceData.subTotal.toFixed(2)}</span>
-          </div>
-          
-          {invoiceData.taxMode === "Tax" && (
-            <div className="flex justify-between py-2 border-b">
-              <span className="font-semibold">VAT (18%):</span>
-              <span>${calculateTaxAmount().toFixed(2)}</span>
+        {/* Items List */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '96mm',
+            left: '15mm',
+            right: '15mm',
+            maxHeight: '70mm',
+            overflow: 'hidden'
+          }}
+        >
+          {invoiceData.items.length > 0 ? (
+            invoiceData.items.map((item, index) => (
+              <div 
+                key={item.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '60% 13% 13% 14%',
+                  backgroundColor: getRowColor(index),
+                  padding: '3mm 2mm',
+                  fontSize: '11px',
+                  color: '#000000',
+                  borderBottom: index < invoiceData.items.length - 1 ? '1px solid #e0e0e0' : 'none',
+                  minHeight: '10mm',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ 
+                  paddingLeft: '2mm', 
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '100%'
+                }}>
+                  {item.itemName || `ITEM NAME / DESCRIPTION`}
+                </div>
+                <div style={{ 
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
+                  ${item.unitPrice.toFixed(2)}
+                </div>
+                <div style={{ 
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
+                  {item.quantity}
+                </div>
+                <div style={{ 
+                  textAlign: 'center', 
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
+                  ${item.total.toFixed(2)}
+                </div>
+              </div>
+            ))
+          ) : (
+            // Show empty state when no items
+            <div 
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '60% 13% 13% 14%',
+                backgroundColor: '#f5f5f5',
+                padding: '3mm 2mm',
+                fontSize: '11px',
+                color: '#000000',
+                fontStyle: 'italic',
+                minHeight: '10mm',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{ 
+                paddingLeft: '2mm',
+                display: 'flex',
+                alignItems: 'center',
+                height: '100%'
+              }}>
+                No items added
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
+              <div style={{ 
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                -
+              </div>
             </div>
           )}
+        </div>
+
+        {/* Payment Details Section */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '185mm',
+            left: '15mm',
+            right: '15mm',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '20mm',
+            fontSize: '12px',
+            color: '#000000'
+          }}
+        >
+          {/* Left Column - Payment Data */}
+          <div>
+            <div style={{ fontWeight: 'bold', marginBottom: '3mm', fontSize: '12px' }}>PAYMENT DATA:</div>
+            <div style={{ marginBottom: '1mm' }}>ACCOUNT#: {invoiceData.bankAccount || "12356587965497"}</div>
+            <div style={{ marginBottom: '1mm' }}>NAME: {invoiceData.accountName || "YOUR NAME"}</div>
+            <div style={{ marginBottom: '1mm' }}>PAYMENT METHOD: {invoiceData.paymentMethod || "DEBIT CARD"}</div>
+          </div>
           
-          {invoiceData.discount > 0 && (
-            <div className="flex justify-between py-2 border-b">
-              <span className="font-semibold">Discount:</span>
-              <span className="text-red-600">-${invoiceData.discount.toFixed(2)}</span>
+          {/* Right Column - Totals */}
+          <div style={{ marginTop: '-5mm' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '4mm', paddingBottom: '2mm', borderBottom: '1px solid #e0e0e0' }}>
+              <span style={{ fontWeight: 'bold' }}>SUBTOTAL:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${invoiceData.subTotal.toFixed(2)}</span>
             </div>
-          )}
-          
-          <div className="flex justify-between py-3 text-lg font-bold border-t-2 border-gray-400">
-            <span>Total:</span>
-            <span>${calculateFinalTotal().toFixed(2)}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '4mm', paddingBottom: '2mm', borderBottom: '1px solid #e0e0e0' }}>
+              <span style={{ fontWeight: 'bold' }}>TAX:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${taxAmount.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', fontWeight: 'bold', fontSize: '14px', marginTop: '2mm' }}>
+              <span>TOTAL:</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>${totalAmount.toFixed(2)}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Terms & Conditions */}
-      <div className="mb-8">
-        <h3 className="font-semibold mb-2">Terms & Conditions</h3>
-        <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-          <li>Warranty covers only manufacturer defects.</li>
-          <li>Damages due to misuse, power fluctuations, or accidents are not covered.</li>
-          <li>Repairs due to such causes will be charged.</li>
-          <li>Physical damage and corrosion voids the warranty.</li>
-          <li>Good once sold are non-returnable</li>
-        </ul>
-      </div>
-
-      {/* Bank Details */}
-      <div className="mb-8">
-        <h3 className="font-semibold mb-2">Bank Details</h3>
-        <div className="text-sm text-gray-600">
-          <p>Account Name: xxxxxxx</p>
-          <p>Bank: xxxxxxx</p>
-          <p>Account No: xxxxxxx</p>
-          <p>Branch: xxxxxxx</p>
+        <div 
+          style={{
+            position: 'absolute',
+            top: '215mm',
+            left: '15mm',
+            right: '15mm',
+            height: '1px',
+            backgroundColor: '#000000',
+            borderTop: '1px solid #000000'
+          }}
+        />
+      
+        {/* Terms and Conditions */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '220mm',
+            left: '15mm',
+            right: '15mm',
+            fontSize: '10px',
+            color: '#000000',
+            lineHeight: '1.3' 
+          }}
+        >
+          <div style={{ fontWeight: 'bold', marginBottom: '2mm', fontSize: '11px' }}>
+            TERMS AND CONDITIONS
+          </div>
+          <div style={{ marginBottom: '0.5mm' }}>• Warranty covers only manufacturer defects.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Damages due to misuse, power fluctuations, or accidents are not covered.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Repairs due to such causes will be charged.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Physical damage or corrosion voids the warranty.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Goods once sold are non-returnable.</div>
+          <div style={{ marginBottom: '0.5mm' }}>• Overdue payments are subject to bank interest rates.</div>
+          {invoiceData.notes && (
+            <>
+              <div style={{ marginTop: '2mm', fontWeight: 'bold' }}>Additional Notes:</div>
+              <div style={{ fontStyle: 'italic' }}>{invoiceData.notes}</div>
+            </>
+          )}
         </div>
-      </div>
 
-      {/* Signature */}
-      <div className="flex justify-between items-end pt-8">
-        <div>
-          <p className="font-semibold mb-1">Received</p>
-        </div>
         
-        <div className="text-right">
-          <div className="border-t border-dashed border-gray-400 w-48 mb-2"></div>
-          <p className="text-sm text-gray-600">Authorized Signature</p>
-        </div>
       </div>
     </div>
   );
