@@ -19,7 +19,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
     }
   };
 
-  // Calculate tax (assuming 18% VAT)
+  // Calculate tax 
   const calculateTax = () => {
     return invoiceData.subTotal * 0.18;
   };
@@ -30,6 +30,9 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   const getRowColor = (index: number) => {
     return index % 2 === 0 ? '#f5f5f5' : '#ffffff';
   };
+
+  // Company VAT number 
+  const companyVatNumber = "VAT123456789";
 
   return (
     <div className="relative" style={{ width: '210mm', height: '297mm' }}>
@@ -91,22 +94,12 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           <div>{invoiceData.customer.address || "123 Anywhere St., Any City"}</div>
           <div>{invoiceData.customer.email || "hello@realtygreatsite.com"}</div>
           <div>{invoiceData.customer.phone || "+123-456-7890"}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
+              <span style={{ fontWeight: '500' }}>VAT Number:</span>
+              <span>{invoiceData.customer.vat_number || "N/A"}</span>
+            </div>
         </div>
 
-        {/* INVOICE */}
-        <div 
-          style={{
-            position: 'absolute',
-            top: '59mm',
-            right: '15mm',
-            fontSize: '15px',
-            fontWeight: 'bold',
-            color: '#000000',
-            textAlign: 'left'
-          }}
-        >
-          INVOICE
-        </div>
 
         {/* Invoice Number */}
         <div 
@@ -122,10 +115,27 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           #{invoiceData.invoiceId || "0000000"}
         </div>
 
+        {/* Company VAT Number */}
         <div 
           style={{
             position: 'absolute',
-            top: '82mm',
+            top: '69mm',
+            right: '15mm',
+            fontSize: '11px',
+            color: '#494949ff',
+            textAlign: 'right',
+            marginTop: '2mm'
+          }}
+        >
+          VAT: {companyVatNumber}
+        </div>
+
+
+
+        <div 
+          style={{
+            position: 'absolute',
+            top: '83mm',
             left: '15mm',
             right: '15mm',
             height: '1px',
@@ -399,13 +409,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
 
           {/* Right Column - Vehicle Details */}
           <div>
-            <div style={{ fontWeight: 'bold', marginBottom: '2mm', fontSize: '11px' }}>
-              VEHICLE DETAILS
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
-              <span style={{ fontWeight: '500' }}>VAT Number:</span>
-              <span>{invoiceData.customer.vat_number || "N/A"}</span>
-            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Vehicle Number:</span>
               <span>{invoiceData.customer.vehicle_number || "N/A"}</span>
@@ -429,6 +432,20 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           </div>
         </div>
 
+{/* Date */}
+<div 
+  style={{
+    position: 'absolute',
+    top: '253mm', 
+    left: '32mm',
+    fontSize: '10px',
+    color: '#000000',
+    fontWeight: 'semibold',
+    marginTop: '3mm'
+  }}
+>
+   {formatDate(invoiceData.issueDate)}
+</div>
         
       </div>
     </div>
