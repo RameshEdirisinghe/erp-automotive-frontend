@@ -150,15 +150,37 @@ const Invoice: React.FC = () => {
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
-    const newItem: InvoiceItem = {
-      ...item,
-      id: Date.now().toString(),
-      total
-    };
+    
+    // Check if item already exists
+    const existingItemIndex = invoiceData.items.findIndex(
+      existing => existing.item === item.item
+    );
 
-    const newItems = [...invoiceData.items, newItem];
+    let newItems;
+    
+    if (existingItemIndex !== -1) {
+      // Update existing item
+      newItems = [...invoiceData.items];
+      const existingItem = newItems[existingItemIndex];
+      const updatedItem = {
+        ...existingItem,
+        quantity: existingItem.quantity + item.quantity,
+        total: (existingItem.quantity + item.quantity) * existingItem.unitPrice
+      };
+      newItems[existingItemIndex] = updatedItem;
+    } else {
+      // Add new item
+      const newItem: InvoiceItem = {
+        ...item,
+        id: Date.now().toString(),
+        total
+      };
+      newItems = [...invoiceData.items, newItem];
+    }
+
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -171,7 +193,8 @@ const Invoice: React.FC = () => {
   const handleRemoveItem = (id: string) => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -194,7 +217,8 @@ const Invoice: React.FC = () => {
     });
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -209,7 +233,8 @@ const Invoice: React.FC = () => {
       const updated = { ...prev, [field]: value };
       
       if (field === 'discount') {
-        const totalAmount = prev.subTotal - (Number(value) || 0);
+        const tax = prev.subTotal * 0.18;
+        const totalAmount = prev.subTotal + tax - (Number(value) || 0);
         return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
       }
       
@@ -248,6 +273,10 @@ const Invoice: React.FC = () => {
     try {
       setIsLoading(true);
       
+      // Calculate final totals with tax
+      const tax = invoiceData.subTotal * 0.18;
+      const finalTotalAmount = invoiceData.subTotal + tax - invoiceData.discount;
+      
       const itemsForBackend = invoiceData.items.map(item => ({
         item: item.item,
         quantity: item.quantity,
@@ -260,7 +289,7 @@ const Invoice: React.FC = () => {
         items: itemsForBackend,
         subTotal: invoiceData.subTotal,
         discount: invoiceData.discount,
-        totalAmount: invoiceData.totalAmount,
+        totalAmount: finalTotalAmount > 0 ? finalTotalAmount : 0,
         paymentStatus: invoiceData.paymentStatus,
         paymentMethod: invoiceData.paymentMethod,
         issueDate: new Date(invoiceData.issueDate).toISOString(),

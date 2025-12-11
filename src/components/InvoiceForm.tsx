@@ -42,13 +42,22 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     // Check stock availability
     if (newItem.item) {
       const selectedItem = inventoryItems.find(item => item.id === newItem.item);
-      if (selectedItem && newItem.quantity > selectedItem.quantity) {
-        setStockWarning(`Only ${selectedItem.quantity} items in stock`);
-      } else {
-        setStockWarning(null);
+      if (selectedItem) {
+        // Calculate total quantity including already added items
+        const existingQuantity = invoiceData.items
+          .filter(item => item.item === newItem.item)
+          .reduce((sum, item) => sum + item.quantity, 0);
+        
+        const totalRequested = existingQuantity + newItem.quantity;
+        
+        if (totalRequested > selectedItem.quantity) {
+          setStockWarning(`Only ${selectedItem.quantity - existingQuantity} items available (${existingQuantity} already in cart)`);
+        } else {
+          setStockWarning(null);
+        }
       }
     }
-  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems]);
+  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems, invoiceData.items]);
 
   useEffect(() => {
     if (searchTerm.trim().length < 2) {
@@ -92,14 +101,39 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       return;
     }
 
-    // Check stock availability
-    const selectedItem = inventoryItems.find(item => item.id === newItem.item);
-    if (selectedItem && newItem.quantity > selectedItem.quantity) {
-      alert(`Cannot add ${newItem.quantity} items. Only ${selectedItem.quantity} in stock.`);
-      return;
+    // Check if item already exists in invoice
+    const existingItem = invoiceData.items.find(item => item.item === newItem.item);
+    
+    if (existingItem) {
+      // Update quantity of existing item
+      const inventoryItem = inventoryItems.find(item => item.id === newItem.item);
+      if (inventoryItem) {
+        const newTotalQuantity = existingItem.quantity + newItem.quantity;
+        if (newTotalQuantity > inventoryItem.quantity) {
+          alert(`Cannot add ${newItem.quantity} items. Only ${inventoryItem.quantity - existingItem.quantity} more available.`);
+          return;
+        }
+        
+        const updatedQuantity = existingItem.quantity + newItem.quantity;
+        const updatedTotal = updatedQuantity * existingItem.unitPrice;
+        
+        onUpdateItem(existingItem.id, { 
+          quantity: updatedQuantity,
+          total: updatedTotal
+        });
+      }
+    } else {
+      // Check stock availability for new item
+      const selectedItem = inventoryItems.find(item => item.id === newItem.item);
+      if (selectedItem && newItem.quantity > selectedItem.quantity) {
+        alert(`Cannot add ${newItem.quantity} items. Only ${selectedItem.quantity} in stock.`);
+        return;
+      }
+
+      onAddItem(newItem);
     }
 
-    onAddItem(newItem);
+    // Reset form
     setNewItem({
       item: "",
       quantity: 1,
@@ -136,6 +170,17 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Calculate totals
+  const calculateTotals = () => {
+    const subTotal = invoiceData.items.reduce((sum, item) => sum + item.total, 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
+    
+    return { subTotal, tax, totalAmount };
+  };
+
+  const { subTotal, tax, totalAmount } = calculateTotals();
 
   return (
     <div className="space-y-6">
@@ -339,7 +384,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           {/* Discount */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Discount ($)
+              Discount (LKR)
             </label>
             <input
               type="number"
@@ -394,32 +439,41 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                       No items found matching "{searchTerm}"
                     </div>
                   ) : (
-                    filteredItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="px-3 py-2 hover:bg-[#1e293b] cursor-pointer border-b border-[#334155] last:border-b-0 transition-colors duration-150"
-                        onClick={() => handleItemSelect(item)}
-                      >
-                        <div className="font-medium text-white">{item.product_name || 'Unnamed Item'}</div>
-                        <div className="text-sm text-gray-400 flex justify-between mt-1">
-                          <span>Code: {item.product_code || 'N/A'}</span>
-                          <span className="text-green-400">${(item.sell_price || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-1">
-                          <span className="text-xs text-gray-500">
-                            Stock: {item.quantity || 0} units
-                          </span>
-                          <span className="text-xs text-blue-400">
-                            Status: {item.status || 'N/A'}
-                          </span>
-                        </div>
-                        {item.vehicle && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Vehicle: {item.vehicle.brand} {item.vehicle.model} ({item.vehicle.year})
+                    filteredItems.map((item) => {
+                      const existingItem = invoiceData.items.find(invItem => invItem.item === item.id);
+                      const existingQuantity = existingItem ? existingItem.quantity : 0;
+                      const available = (item.quantity || 0) - existingQuantity;
+                      
+                      return (
+                        <div
+                          key={item.id}
+                          className="px-3 py-2 hover:bg-[#1e293b] cursor-pointer border-b border-[#334155] last:border-b-0 transition-colors duration-150"
+                          onClick={() => handleItemSelect(item)}
+                        >
+                          <div className="font-medium text-white">{item.product_name || 'Unnamed Item'}</div>
+                          <div className="text-sm text-gray-400 flex justify-between mt-1">
+                            <span>Code: {item.product_code || 'N/A'}</span>
+                            <span className="text-green-400">LKR {(item.sell_price || 0).toFixed(2)}</span>
                           </div>
-                        )}
-                      </div>
-                    ))
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs text-gray-500">
+                              Stock: {item.quantity || 0} units
+                              {existingQuantity > 0 && (
+                                <span className="text-blue-400 ml-1">({existingQuantity} in cart)</span>
+                              )}
+                            </span>
+                            <span className={`text-xs ${available > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              Available: {available}
+                            </span>
+                          </div>
+                          {item.vehicle && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Vehicle: {item.vehicle.brand} {item.vehicle.model} ({item.vehicle.year})
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -454,7 +508,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 </div>
                 <div>
                   <div className="text-sm text-gray-400 mb-1">Unit Price</div>
-                  <div className="font-medium text-green-400">${newItem.unitPrice.toFixed(2)}</div>
+                  <div className="font-medium text-green-400">LKR {newItem.unitPrice.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-400 mb-1">Status</div>
@@ -509,7 +563,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               </label>
               <div className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2">
                 <div className="text-lg font-semibold text-green-400">
-                  ${itemTotal.toFixed(2)}
+                  LKR {itemTotal.toFixed(2)}
                 </div>
               </div>
             </div>
@@ -522,7 +576,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
-            Add Item to Invoice
+            {invoiceData.items.some(item => item.item === newItem.item) ? 'Update Item Quantity' : 'Add Item to Invoice'}
           </button>
         </div>
       </div>
@@ -533,12 +587,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-200">Items List ({invoiceData.items.length} items)</h3>
             <div className="text-sm text-gray-400">
-              Subtotal: <span className="text-green-400 font-semibold">${invoiceData.subTotal.toFixed(2)}</span>
+              Subtotal: <span className="text-green-400 font-semibold">LKR {subTotal.toFixed(2)}</span>
             </div>
           </div>
           <div className="space-y-3">
             {invoiceData.items.map((item) => {
               const inventoryItem = inventoryItems.find(inv => inv.id === item.item);
+              const existingQuantity = invoiceData.items
+                .filter(invItem => invItem.item === item.item)
+                .reduce((sum, invItem) => sum + invItem.quantity, 0);
+              
               return (
                 <div key={item.id} className="bg-[#0f172a] p-4 rounded-lg border border-[#334155]">
                   <div className="flex justify-between items-start">
@@ -550,7 +608,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                           {inventoryItem && (
                             <div className="text-xs text-gray-500 mt-1">
                               Stock: {inventoryItem.quantity || 0} units
-                              {item.quantity > (inventoryItem.quantity || 0) && (
+                              {existingQuantity > (inventoryItem.quantity || 0) && (
                                 <span className="text-red-400 ml-2">(Insufficient stock!)</span>
                               )}
                             </div>
@@ -578,11 +636,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                         </div>
                         <div className="text-gray-400">
                           <div>Unit Price</div>
-                          <div className="text-white font-medium">${item.unitPrice.toFixed(2)}</div>
+                          <div className="text-white font-medium">LKR {item.unitPrice.toFixed(2)}</div>
                         </div>
                         <div className="text-gray-400">
                           <div>Total</div>
-                          <div className="text-green-400 font-semibold">${item.total.toFixed(2)}</div>
+                          <div className="text-green-400 font-semibold">LKR {item.total.toFixed(2)}</div>
                         </div>
                       </div>
                     </div>
@@ -596,15 +654,19 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           <div className="mt-6 pt-4 border-t border-[#334155]">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-300">Subtotal:</span>
-              <span className="text-white font-medium">${invoiceData.subTotal.toFixed(2)}</span>
+              <span className="text-white font-medium">LKR {subTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-300">Tax (18%):</span>
+              <span className="text-yellow-400 font-medium">LKR {tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-300">Discount:</span>
-              <span className="text-red-400 font-medium">-${invoiceData.discount.toFixed(2)}</span>
+              <span className="text-red-400 font-medium">- LKR {invoiceData.discount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-lg font-semibold pt-2 border-t border-[#334155]">
               <span className="text-gray-200">Total Amount:</span>
-              <span className="text-green-400">${invoiceData.totalAmount.toFixed(2)}</span>
+              <span className="text-green-400">LKR {totalAmount.toFixed(2)}</span>
             </div>
           </div>
         </div>
