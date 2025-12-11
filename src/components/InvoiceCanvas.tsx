@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { InvoiceData } from "../types/invoice";
 import InvoiceTemplate from "../assets/Business invoice Template.jpg";
 
@@ -7,6 +7,8 @@ interface InvoiceCanvasProps {
 }
 
 const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
+  const templateRef = useRef<HTMLImageElement>(null);
+  
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -34,12 +36,25 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   // Company VAT number 
   const companyVatNumber = "VAT123456789";
 
+  useEffect(() => {
+    if (templateRef.current) {
+      const img = templateRef.current;
+      if (!img.complete) {
+        img.onload = () => {
+          console.log('Invoice template loaded for PDF generation');
+        };
+      }
+    }
+  }, []);
+
   return (
     <div className="relative" style={{ width: '210mm', height: '297mm' }}>
       {/* Background Template Image */}
       <img 
+        ref={templateRef}
         src={InvoiceTemplate} 
         alt="Invoice Template Background"
+        crossOrigin="anonymous"
         style={{
           position: 'absolute',
           top: 0,
@@ -47,6 +62,12 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           width: '100%',
           height: '100%',
           zIndex: 1
+        }}
+        onLoad={() => console.log('Template image loaded')}
+        onError={(e) => {
+          console.error('Failed to load template image:', e);
+         
+          (e.target as HTMLImageElement).style.display = 'none';
         }}
       />
 
@@ -130,12 +151,10 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           VAT: {companyVatNumber}
         </div>
 
-
-
         <div 
           style={{
             position: 'absolute',
-            top: '83mm',
+            top: '85mm',
             left: '15mm',
             right: '15mm',
             height: '1px',
@@ -157,14 +176,15 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
             display: 'grid',
             gridTemplateColumns: '60% 13% 13% 14%',
             backgroundColor: '#2e2d2dff',
-            padding: '3mm 2mm',
+            padding: '2mm 2mm',
             alignItems: 'center'
           }}
         >
-          <div style={{ 
-            paddingLeft: '2mm', 
+           <div style={{ 
+            paddingLeft: '2mm',
             display: 'flex', 
             alignItems: 'center',
+            justifyContent: 'flex-start', 
             height: '100%'
           }}>
             DESCRIPTION
@@ -232,7 +252,8 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
                   alignItems: 'center',
                   height: '100%'
                 }}>
-                  {item.itemName || `ITEM NAME / DESCRIPTION`}
+                 
+                  {item.itemName || item.item || `ITEM NAME / DESCRIPTION`}
                 </div>
                 <div style={{ 
                   textAlign: 'center',
@@ -432,20 +453,20 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           </div>
         </div>
 
-{/* Date */}
-<div 
-  style={{
-    position: 'absolute',
-    top: '253mm', 
-    left: '32mm',
-    fontSize: '10px',
-    color: '#000000',
-    fontWeight: 'semibold',
-    marginTop: '3mm'
-  }}
->
-   {formatDate(invoiceData.issueDate)}
-</div>
+        {/* Date */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '251mm', 
+            left: '32mm',
+            fontSize: '10px',
+            color: '#000000',
+            fontWeight: '500',
+            marginTop: '3mm'
+          }}
+        >
+          {formatDate(invoiceData.issueDate)}
+        </div>
         
       </div>
     </div>
