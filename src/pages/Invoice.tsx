@@ -45,6 +45,7 @@ const Invoice: React.FC = () => {
   const [isMobileView, setIsMobileView] = useState(false);
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -150,15 +151,37 @@ const Invoice: React.FC = () => {
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
-    const newItem: InvoiceItem = {
-      ...item,
-      id: Date.now().toString(),
-      total
-    };
+    
+    // Check if item already exists
+    const existingItemIndex = invoiceData.items.findIndex(
+      existing => existing.item === item.item
+    );
 
-    const newItems = [...invoiceData.items, newItem];
+    let newItems;
+    
+    if (existingItemIndex !== -1) {
+      // Update existing item
+      newItems = [...invoiceData.items];
+      const existingItem = newItems[existingItemIndex];
+      const updatedItem = {
+        ...existingItem,
+        quantity: existingItem.quantity + item.quantity,
+        total: (existingItem.quantity + item.quantity) * existingItem.unitPrice
+      };
+      newItems[existingItemIndex] = updatedItem;
+    } else {
+      // Add new item
+      const newItem: InvoiceItem = {
+        ...item,
+        id: Date.now().toString(),
+        total
+      };
+      newItems = [...invoiceData.items, newItem];
+    }
+
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -171,7 +194,8 @@ const Invoice: React.FC = () => {
   const handleRemoveItem = (id: string) => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -194,7 +218,8 @@ const Invoice: React.FC = () => {
     });
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const totalAmount = subTotal - (invoiceData.discount || 0);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - invoiceData.discount;
 
     setInvoiceData(prev => ({
       ...prev,
@@ -209,7 +234,8 @@ const Invoice: React.FC = () => {
       const updated = { ...prev, [field]: value };
       
       if (field === 'discount') {
-        const totalAmount = prev.subTotal - (Number(value) || 0);
+        const tax = prev.subTotal * 0.18;
+        const totalAmount = prev.subTotal + tax - (Number(value) || 0);
         return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
       }
       
@@ -248,6 +274,10 @@ const Invoice: React.FC = () => {
     try {
       setIsLoading(true);
       
+      // Calculate final totals with tax
+      const tax = invoiceData.subTotal * 0.18;
+      const finalTotalAmount = invoiceData.subTotal + tax - invoiceData.discount;
+      
       const itemsForBackend = invoiceData.items.map(item => ({
         item: item.item,
         quantity: item.quantity,
@@ -260,7 +290,7 @@ const Invoice: React.FC = () => {
         items: itemsForBackend,
         subTotal: invoiceData.subTotal,
         discount: invoiceData.discount,
-        totalAmount: invoiceData.totalAmount,
+        totalAmount: finalTotalAmount > 0 ? finalTotalAmount : 0,
         paymentStatus: invoiceData.paymentStatus,
         paymentMethod: invoiceData.paymentMethod,
         issueDate: new Date(invoiceData.issueDate).toISOString(),
@@ -319,39 +349,107 @@ const Invoice: React.FC = () => {
   };
 
   const downloadPDF = async () => {
-    if (!invoiceRef.current) return;
+    if (!invoiceRef.current) {
+      setAlert({
+        type: 'error',
+        message: "Invoice content not available for PDF generation."
+      });
+      return;
+    }
 
     try {
+      setIsGeneratingPDF(true);
       setAlert({
         type: 'info',
-        message: 'Generating PDF...'
+        message: 'Generating PDF... Please wait.'
       });
 
-      const canvas = await html2canvas(invoiceRef.current, {
-        scale: 3,
+      const invoiceContainer = invoiceRef.current;
+      
+      const originalTransform = invoiceContainer.style.transform;
+      const originalTransformOrigin = invoiceContainer.style.transformOrigin;
+      const originalWidth = invoiceContainer.style.width;
+      const originalHeight = invoiceContainer.style.height;
+      
+      invoiceContainer.style.transform = 'none';
+      invoiceContainer.style.transformOrigin = 'top left';
+      invoiceContainer.style.width = '210mm';
+      invoiceContainer.style.height = '297mm';
+      invoiceContainer.style.position = 'fixed';
+      invoiceContainer.style.left = '0';
+      invoiceContainer.style.top = '0';
+      invoiceContainer.style.zIndex = '9999';
+      
+      invoiceContainer.offsetHeight;
+
+      const images = invoiceContainer.getElementsByTagName('img');
+      const imageLoadPromises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+
+      await Promise.all(imageLoadPromises);
+      
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvas = await html2canvas(invoiceContainer, {
+        scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
         width: 794,
         height: 1123,
-        windowWidth: 794,
-        windowHeight: 1123
+        onclone: (clonedDoc: Document) => {
+         
+          const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
+          if (clonedContainer) {
+            (clonedContainer as HTMLElement).style.transform = 'none';
+            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+            (clonedContainer as HTMLElement).style.width = '210mm';
+            (clonedContainer as HTMLElement).style.height = '297mm';
+          }
+        }
       });
 
-      const imgData = canvas.toDataURL('image/png', 1.0);
+      invoiceContainer.style.transform = originalTransform;
+      invoiceContainer.style.transformOrigin = originalTransformOrigin;
+      invoiceContainer.style.width = originalWidth;
+      invoiceContainer.style.height = originalHeight;
+      invoiceContainer.style.position = '';
+      invoiceContainer.style.left = '';
+      invoiceContainer.style.top = '';
+      invoiceContainer.style.zIndex = '';
+
+      // Convert canvas to JPEG image
+      const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+      
+      // Create PDF with A4 dimensions
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+      
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
+      
+      const xPos = 0;
+      const yPos = 0;
 
-      const pageHeight = 297;
-      const yOffset = (pageHeight - imgHeight) / 2;
-
-      pdf.addImage(imgData, 'PNG', 0, yOffset, imgWidth, imgHeight);
+      // Add JPEG image to PDF
+      pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
+      
+      // Save the PDF
       pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
 
       setAlert({
@@ -362,108 +460,133 @@ const Invoice: React.FC = () => {
       console.error('Error generating PDF:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to generate PDF. Please try again.'
+        message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
       });
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
   const handlePrint = () => {
     if (!invoiceRef.current) return;
 
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (!printWindow) {
-      setAlert({
-        type: 'error',
-        message: "Popup blocked! Please allow popups for this site to print."
+    try {
+      
+      const printContainer = document.createElement('div');
+      printContainer.style.cssText = `
+        position: fixed;
+        left: -9999px;
+        top: 0;
+        width: 210mm;
+        height: 297mm;
+        background: white;
+      `;
+
+      
+      const invoiceContent = invoiceRef.current.cloneNode(true) as HTMLDivElement;
+      invoiceContent.style.cssText = `
+        width: 210mm !important;
+        height: 297mm !important;
+        transform: none !important;
+        transform-origin: unset !important;
+        background: white;
+        margin: 0;
+        padding: 0;
+      `;
+
+      const allElements = invoiceContent.querySelectorAll('*');
+      allElements.forEach(el => {
+        const element = el as HTMLElement;
+        element.style.transform = 'none !important';
+        element.style.transformOrigin = 'unset !important';
       });
-      return;
-    }
 
-    const invoiceContent = invoiceRef.current.innerHTML;
+      printContainer.appendChild(invoiceContent);
+      document.body.appendChild(printContainer);
 
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${invoiceData.invoiceId}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+      // Create print styles
+      const printStyles = `
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          
+          @media print {
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 210mm !important;
+              height: 297mm !important;
+            }
+            
+            .print-container {
+              width: 210mm !important;
+              height: 297mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+            }
             
             * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            body {
-              font-family: 'Inter', Arial, sans-serif;
-              background: white;
               -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
               color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
-            
-            .invoice-container {
-              width: 210mm;
-              min-height: 297mm;
-              margin: 0 auto;
-              padding: 15mm;
-              background: white;
-              font-size: 12px;
-              line-height: 1.4;
-              position: relative;
-            }
-            
-            @page {
-              size: A4;
-              margin: 0;
-            }
-            
-            @media print {
-              body {
-                margin: 0;
-                padding: 0;
-                width: 210mm;
-                height: 297mm;
-              }
-              
-              .invoice-container {
-                margin: 0;
-                padding: 15mm;
-                width: 210mm;
-                min-height: 297mm;
-                page-break-inside: avoid;
-                break-inside: avoid;
-              }
-            }
-            
-            img {
-              max-width: 100%;
-              height: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="invoice-container">
-            ${invoiceContent}
-          </div>
-          <script>
-            window.onload = function() {
-              window.focus();
-              setTimeout(function() {
-                window.print();
-                setTimeout(function() {
-                  window.close();
-                }, 500);
-              }, 250);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+          }
+        </style>
+      `;
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+      // Create print window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setAlert({
+          type: 'error',
+          message: "Popup blocked! Please allow popups for this site to print."
+        });
+        document.body.removeChild(printContainer);
+        return;
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Invoice ${invoiceData.invoiceId}</title>
+            ${printStyles}
+          </head>
+          <body>
+            <div class="print-container">
+              ${invoiceContent.innerHTML}
+            </div>
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                  setTimeout(function() {
+                    window.close();
+                  }, 100);
+                }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(printContainer);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error preparing print:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to prepare print. Please try again.'
+      });
+    }
   };
 
   return (
@@ -576,15 +699,21 @@ const Invoice: React.FC = () => {
                 <div className="flex items-center justify-end sm:justify-start gap-2">
                   <button
                     onClick={downloadPDF}
-                    disabled={isLoading}
+                    disabled={isLoading || isGeneratingPDF}
                     className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Download className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="hidden sm:inline">PDF</span>
+                    {isGeneratingPDF ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        <Download className="w-3 h-3 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">PDF</span>
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={handlePrint}
-                    disabled={isLoading}
+                    disabled={isLoading || isGeneratingPDF}
                     className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Printer className="w-3 h-3 md:w-4 md:h-4" />
@@ -601,6 +730,7 @@ const Invoice: React.FC = () => {
             >
               <div
                 ref={invoiceRef}
+                data-invoice-container="true"
                 style={{
                   transform: `scale(${scale})`,
                   transformOrigin: 'center',
