@@ -17,6 +17,7 @@ import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import CustomAlert from "../components/CustomAlert";
+import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
 
 interface BackendInvoiceData {
@@ -46,7 +47,7 @@ const Invoice: React.FC = () => {
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.7);
@@ -380,7 +381,7 @@ const Invoice: React.FC = () => {
       invoiceContainer.style.top = '0';
       invoiceContainer.style.zIndex = '9999';
       
-      invoiceContainer.offsetHeight;
+      void invoiceContainer.offsetHeight;
 
       const images = invoiceContainer.getElementsByTagName('img');
       const imageLoadPromises = Array.from(images).map(img => {
@@ -393,7 +394,6 @@ const Invoice: React.FC = () => {
 
       await Promise.all(imageLoadPromises);
       
-      
       await new Promise(resolve => setTimeout(resolve, 300));
 
       const canvas = await html2canvas(invoiceContainer, {
@@ -405,7 +405,6 @@ const Invoice: React.FC = () => {
         width: 794,
         height: 1123,
         onclone: (clonedDoc: Document) => {
-         
           const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
           if (clonedContainer) {
             (clonedContainer as HTMLElement).style.transform = 'none';
@@ -467,75 +466,38 @@ const Invoice: React.FC = () => {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!invoiceRef.current) return;
 
     try {
-      
-      const printContainer = document.createElement('div');
-      printContainer.style.cssText = `
-        position: fixed;
-        left: -9999px;
-        top: 0;
-        width: 210mm;
-        height: 297mm;
-        background: white;
-      `;
-
-      
-      const invoiceContent = invoiceRef.current.cloneNode(true) as HTMLDivElement;
-      invoiceContent.style.cssText = `
-        width: 210mm !important;
-        height: 297mm !important;
-        transform: none !important;
-        transform-origin: unset !important;
-        background: white;
-        margin: 0;
-        padding: 0;
-      `;
-
-      const allElements = invoiceContent.querySelectorAll('*');
-      allElements.forEach(el => {
-        const element = el as HTMLElement;
-        element.style.transform = 'none !important';
-        element.style.transformOrigin = 'unset !important';
+      setIsGeneratingPDF(true);
+      setAlert({
+        type: 'info',
+        message: 'Preparing print... Please wait.'
       });
 
-      printContainer.appendChild(invoiceContent);
-      document.body.appendChild(printContainer);
+      const canvas = await html2canvas(invoiceRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 794,
+        height: 1123,
+        onclone: (clonedDoc: Document) => {
+          const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
+          if (clonedContainer) {
+            
+            (clonedContainer as HTMLElement).style.transform = 'none';
+            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+            (clonedContainer as HTMLElement).style.width = '210mm';
+            (clonedContainer as HTMLElement).style.height = '297mm';
+          }
+        }
+      });
 
-      // Create print styles
-      const printStyles = `
-        <style>
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          
-          @media print {
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 210mm !important;
-              height: 297mm !important;
-            }
-            
-            .print-container {
-              width: 210mm !important;
-              height: 297mm !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-            }
-            
-            * {
-              -webkit-print-color-adjust: exact !important;
-              color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-          }
-        </style>
-      `;
+      // Convert canvas to data URL
+      const imageData = canvas.toDataURL('image/png', 1.0);
 
       // Create print window
       const printWindow = window.open('', '_blank');
@@ -544,41 +506,97 @@ const Invoice: React.FC = () => {
           type: 'error',
           message: "Popup blocked! Please allow popups for this site to print."
         });
-        document.body.removeChild(printContainer);
+        setIsGeneratingPDF(false);
         return;
       }
 
-      printWindow.document.write(`
+      // Create HTML for printing
+      const printHtml = `
         <!DOCTYPE html>
         <html>
           <head>
             <title>Invoice ${invoiceData.invoiceId}</title>
-            ${printStyles}
+            <style>
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+              
+              body {
+                margin: 0;
+                padding: 0;
+                width: 210mm;
+                height: 297mm;
+              }
+              
+              .print-container {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              
+              .invoice-image {
+                width: 210mm;
+                height: 297mm;
+                object-fit: contain;
+              }
+              
+              @media print {
+                body {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                
+                .print-container {
+                  page-break-inside: avoid;
+                  page-break-after: avoid;
+                }
+                
+                .invoice-image {
+                  page-break-inside: avoid;
+                }
+              }
+            </style>
           </head>
           <body>
             <div class="print-container">
-              ${invoiceContent.innerHTML}
+              <img src="${imageData}" alt="Invoice ${invoiceData.invoiceId}" class="invoice-image" />
             </div>
             <script>
+              // Wait for image to load then print
               window.onload = function() {
                 setTimeout(function() {
                   window.print();
+                  // Close window after print dialog closes
                   setTimeout(function() {
                     window.close();
-                  }, 100);
+                  }, 1000);
                 }, 500);
               };
+              
+              // Fallback if window.onload doesn't fire
+              setTimeout(function() {
+                window.print();
+                setTimeout(function() {
+                  window.close();
+                }, 1000);
+              }, 2000);
             </script>
           </body>
         </html>
-      `);
-      
+      `;
+
+      // Write to print window
+      printWindow.document.open();
+      printWindow.document.write(printHtml);
       printWindow.document.close();
       
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(printContainer);
-      }, 1000);
+      // Focus the window
+      printWindow.focus();
+
+      setIsGeneratingPDF(false);
       
     } catch (error) {
       console.error('Error preparing print:', error);
@@ -586,6 +604,7 @@ const Invoice: React.FC = () => {
         type: 'error',
         message: 'Failed to prepare print. Please try again.'
       });
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -600,7 +619,7 @@ const Invoice: React.FC = () => {
             type={alert.type}
             message={alert.message}
             onClose={() => setAlert(null)}
-            duration={5000}
+            duration={3000}
           />
         )}
 

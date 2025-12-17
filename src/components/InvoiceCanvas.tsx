@@ -27,7 +27,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   };
 
   const taxAmount = calculateTax();
-  const totalAmount = invoiceData.subTotal + taxAmount;
+  const totalAmount = invoiceData.subTotal + taxAmount - invoiceData.discount;
 
   const getRowColor = (index: number) => {
     return index % 2 === 0 ? '#f5f5f5' : '#ffffff';
@@ -47,6 +47,40 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
     }
   }, []);
 
+  const renderCustomerDetails = () => {
+    const details = [];
+    
+    // Issue date 
+    details.push(<div key="date">{formatDate(invoiceData.issueDate)}</div>);
+    
+    // Add address only if it exists
+    if (invoiceData.customer.address && invoiceData.customer.address.trim()) {
+      details.push(<div key="address">{invoiceData.customer.address}</div>);
+    }
+    
+    // Add email only if it exists
+    if (invoiceData.customer.email && invoiceData.customer.email.trim()) {
+      details.push(<div key="email">{invoiceData.customer.email}</div>);
+    }
+    
+    // Add phone only if it exists
+    if (invoiceData.customer.phone && invoiceData.customer.phone.trim()) {
+      details.push(<div key="phone">{invoiceData.customer.phone}</div>);
+    }
+    
+    // Add VAT number only if it exists
+    if (invoiceData.customer.vat_number && invoiceData.customer.vat_number.trim()) {
+      details.push(
+        <div key="vat" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
+          <span style={{ fontWeight: '500' }}>VAT Number:</span>
+          <span>{invoiceData.customer.vat_number}</span>
+        </div>
+      );
+    }
+    
+    return details;
+  };
+
   return (
     <div className="relative" style={{ width: '210mm', height: '297mm' }}>
       {/* Background Template Image */}
@@ -61,12 +95,12 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           left: 0,
           width: '100%',
           height: '100%',
-          zIndex: 1
+          zIndex: 1,
+          pointerEvents: 'none' 
         }}
         onLoad={() => console.log('Template image loaded')}
         onError={(e) => {
           console.error('Failed to load template image:', e);
-         
           (e.target as HTMLImageElement).style.display = 'none';
         }}
       />
@@ -97,7 +131,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
             color: '#000000'
           }}
         >
-          {invoiceData.customer.name || "Name Surname"}
+          {invoiceData.customer.name || ""}
         </div>
 
         {/* Customer Details */}
@@ -111,16 +145,8 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
             lineHeight: '1.5'
           }}
         >
-          <div>{formatDate(invoiceData.issueDate)}</div>
-          <div>{invoiceData.customer.address || "123 Anywhere St., Any City"}</div>
-          <div>{invoiceData.customer.email || "hello@realtygreatsite.com"}</div>
-          <div>{invoiceData.customer.phone || "+123-456-7890"}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
-              <span style={{ fontWeight: '500' }}>VAT Number:</span>
-              <span>{invoiceData.customer.vat_number || "N/A"}</span>
-            </div>
+          {renderCustomerDetails()}
         </div>
-
 
         {/* Invoice Number */}
         <div 
@@ -163,60 +189,64 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           }}
         />
 
-        {/* Table Header */}
-        <div 
-          style={{
-            position: 'absolute',
-            top: '88mm',
-            left: '15mm',
-            right: '15mm',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            color: '#ffffff',
-            display: 'grid',
-            gridTemplateColumns: '60% 13% 13% 14%',
-            backgroundColor: '#2e2d2dff',
-            padding: '2mm 2mm',
-            alignItems: 'center'
-          }}
-        >
-           <div style={{ 
-            paddingLeft: '2mm',
-            display: 'flex', 
-            alignItems: 'center',
-            justifyContent: 'flex-start', 
-            height: '100%'
-          }}>
-            DESCRIPTION
-          </div>
-          <div style={{ 
-            textAlign: 'center', 
-            display: 'flex', 
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%'
-          }}>
-            PRICE
-          </div>
-          <div style={{ 
-            textAlign: 'center', 
-            display: 'flex', 
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%'
-          }}>
-            QTY
-          </div>
-          <div style={{ 
-            textAlign: 'center', 
-            display: 'flex', 
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%'
-          }}>
-            TOTAL
-          </div>
-        </div>
+       {/* Table Header */}
+<div 
+  style={{
+    position: 'absolute',
+    top: '88mm',
+    left: '15mm',
+    right: '15mm',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    color: '#ffffff',
+    display: 'grid',
+    gridTemplateColumns: '60% 13% 13% 14%',
+    backgroundColor: '#2e2d2dff',
+    padding: '2mm 0',
+    alignItems: 'center',
+    height: '8mm',
+    minHeight: '8mm',
+    maxHeight: '8mm',
+    boxSizing: 'border-box'
+  }}
+>
+  <div style={{ 
+    paddingLeft: '2mm',
+    display: 'flex', 
+    alignItems: 'center',
+    justifyContent: 'flex-start', 
+    height: '100%'
+  }}>
+    DESCRIPTION
+  </div>
+  <div style={{ 
+    textAlign: 'center', 
+    display: 'flex', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%'
+  }}>
+    PRICE
+  </div>
+  <div style={{ 
+    textAlign: 'center', 
+    display: 'flex', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%'
+  }}>
+    QTY
+  </div>
+  <div style={{ 
+    textAlign: 'center', 
+    display: 'flex', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%'
+  }}>
+    TOTAL
+  </div>
+</div>
 
         {/* Items List */}
         <div 
@@ -252,7 +282,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
                   alignItems: 'center',
                   height: '100%'
                 }}>
-                 
                   {item.itemName || item.item || `ITEM NAME / DESCRIPTION`}
                 </div>
                 <div style={{ 
@@ -286,7 +315,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
               </div>
             ))
           ) : (
-            
             <div 
               style={{
                 display: 'grid',
