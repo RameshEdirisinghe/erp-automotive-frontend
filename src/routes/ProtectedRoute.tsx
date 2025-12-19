@@ -11,13 +11,15 @@ export default function ProtectedRoute({ children }: Props) {
 
   if (isLoading) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center z-50">
-        <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center h-screen">
+        Loading...
       </div>
     );
   }
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   return children;
 }
