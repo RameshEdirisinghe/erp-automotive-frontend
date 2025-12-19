@@ -1,23 +1,42 @@
-import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Search, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Plus, Trash2, Search, AlertCircle, UserPlus, User, X, Edit, Eye } from "lucide-react";
 import type { InvoiceData, InvoiceItem } from "../types/invoice";
 import type { InventoryItem } from "../types/inventory"; 
 import { PaymentMethod, PaymentStatus } from "../types/invoice";
+import { invoiceService } from "../services/InvoiceService";
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
   onFieldChange: (field: keyof InvoiceData, value: string | number | boolean | Date) => void;
-  onCustomerChange: (field: keyof InvoiceData['customer'], value: string | number | undefined) => void;
+  onCustomerIdChange: (customerId: string, customerDetails?: Record<string, any>) => void;
   onAddItem: (item: Omit<InvoiceItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
   inventoryItems: InventoryItem[];
 }
 
+interface Customer {
+  _id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  vatNumber: string;
+  address?: {
+    street?: string;
+    city?: string;
+    country?: string;
+    zip?: string;
+  };
+  vehicle_number?: string;
+  vehicle_model?: string;
+  year_of_manufacture?: number;
+  customerCode?: string;
+}
+
 const InvoiceForm: React.FC<InvoiceFormProps> = ({
   invoiceData,
   onFieldChange,
-  onCustomerChange,
+  onCustomerIdChange,
   onAddItem,
   onRemoveItem,
   onUpdateItem,
@@ -35,6 +54,47 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [itemTotal, setItemTotal] = useState(0);
   const [stockWarning, setStockWarning] = useState<string | null>(null);
+  
+  // Customer state
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [, setLoadingCustomers] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    vatNumber: "",
+    address: {
+      street: "",
+      city: "",
+      country: "",
+      zip: ""
+    },
+    vehicle_number: "",
+    vehicle_model: "",
+    year_of_manufacture: undefined as number | undefined
+  });
+
+  // Calculate totals
+  useEffect(() => {
+    const subTotal = invoiceData.items.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
+    const tax = subTotal * 0.18;
+    const totalAmount = subTotal + tax - discountAmount;
+    
+    // Update the discount amount in the invoice data
+    if (Math.abs(invoiceData.discount - discountAmount) > 0.01) {
+      onFieldChange('discount', parseFloat(discountAmount.toFixed(2)));
+    }
+    onFieldChange('subTotal', parseFloat(subTotal.toFixed(2)));
+    onFieldChange('totalAmount', parseFloat(Math.max(totalAmount, 0).toFixed(2)));
+  }, [invoiceData.items, invoiceData.discountPercentage, invoiceData.discount, onFieldChange]);
 
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
@@ -58,6 +118,46 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       }
     }
   }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems, invoiceData.items]);
+
+  // Load all customers on component mount
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        setLoadingCustomers(true);
+        const customers = await invoiceService.getAllCustomers();
+        setAllCustomers(customers);
+      } catch (error) {
+        console.error('Error loading customers:', error);
+      } finally {
+        setLoadingCustomers(false);
+      }
+    };
+    loadCustomers();
+  }, []);
+
+  // Filter customers based on search term
+  useEffect(() => {
+    if (customerSearchTerm.trim().length < 2) {
+      setFilteredCustomers([]);
+      return;
+    }
+
+    const searchTermLower = customerSearchTerm.toLowerCase().trim();
+    const filtered = allCustomers.filter(customer => {
+      // Check phone number
+      if (customer.phone && customer.phone.toLowerCase().includes(searchTermLower)) return true;
+      
+      // Check full name
+      if (customer.fullName && customer.fullName.toLowerCase().includes(searchTermLower)) return true;
+      
+      // Check email
+      if (customer.email && customer.email.toLowerCase().includes(searchTermLower)) return true;
+      
+      return false;
+    });
+    
+    setFilteredCustomers(filtered);
+  }, [customerSearchTerm, allCustomers]);
 
   useEffect(() => {
     if (searchTerm.trim().length < 2) {
@@ -93,6 +193,44 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     setSearchTerm(`${inventoryItem.product_name} (${inventoryItem.product_code})`);
     setShowSuggestions(false);
     setStockWarning(null);
+  };
+
+  const handleCustomerSelect = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    onCustomerIdChange(customer._id, customer);
+    setCustomerSearchTerm(`${customer.fullName} (${customer.phone})`);
+    setShowCustomerSuggestions(false);
+    setEditingCustomer(false);
+    setViewingCustomer(false);
+  };
+
+  const handleEditCustomer = () => {
+    if (!selectedCustomer) return;
+    
+    setEditingCustomer(true);
+    setCreatingCustomer(false);
+    
+    // Populate form with selected customer's data
+    setNewCustomer({
+      fullName: selectedCustomer.fullName || "",
+      email: selectedCustomer.email || "",
+      phone: selectedCustomer.phone || "",
+      vatNumber: selectedCustomer.vatNumber || "",
+      address: {
+        street: selectedCustomer.address?.street || "",
+        city: selectedCustomer.address?.city || "",
+        country: selectedCustomer.address?.country || "",
+        zip: selectedCustomer.address?.zip || ""
+      },
+      vehicle_number: selectedCustomer.vehicle_number || "",
+      vehicle_model: selectedCustomer.vehicle_model || "",
+      year_of_manufacture: selectedCustomer.year_of_manufacture
+    });
+  };
+
+  const handleViewCustomer = () => {
+    if (!selectedCustomer) return;
+    setViewingCustomer(true);
   };
 
   const handleAddItem = () => {
@@ -157,11 +295,17 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   };
 
+  // Handle click outside for both search dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.search-container')) {
+      
+      if (!target.closest('.item-search-container')) {
         setShowSuggestions(false);
+      }
+      
+      if (!target.closest('.customer-search-container')) {
+        setShowCustomerSuggestions(false);
       }
     };
 
@@ -171,140 +315,537 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     };
   }, []);
 
-  // Calculate totals
+  // Calculate totals 
   const calculateTotals = () => {
     const subTotal = invoiceData.items.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
     const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
+    const totalAmount = subTotal + tax - discountAmount;
     
-    return { subTotal, tax, totalAmount };
+    return { subTotal, tax, discountAmount, totalAmount };
   };
 
-  const { subTotal, tax, totalAmount } = calculateTotals();
+  const { subTotal, tax, discountAmount, totalAmount } = calculateTotals();
+
+  const handleDiscountPercentageChange = (value: string) => {
+    const percentage = parseFloat(value) || 0;
+    
+    const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
+    onFieldChange('discountPercentage', clampedPercentage);
+  };
+
+  const resetNewCustomerForm = () => {
+    setNewCustomer({
+      fullName: "",
+      email: "",
+      phone: "",
+      vatNumber: "",
+      address: {
+        street: "",
+        city: "",
+        country: "",
+        zip: ""
+      },
+      vehicle_number: "",
+      vehicle_model: "",
+      year_of_manufacture: undefined
+    });
+  };
+
+  // Open create customer form
+  const handleOpenCreateCustomer = () => {
+    resetNewCustomerForm();
+    setCreatingCustomer(true);
+    setEditingCustomer(false);
+    setViewingCustomer(false);
+    
+    if (customerSearchTerm) {
+      if (/^\d+$/.test(customerSearchTerm) && customerSearchTerm.length >= 2) {
+        // phone number
+        setNewCustomer(prev => ({ ...prev, phone: customerSearchTerm }));
+      } else if (customerSearchTerm.includes(' ')) {
+        // name 
+        setNewCustomer(prev => ({ ...prev, fullName: customerSearchTerm }));
+      } else if (customerSearchTerm.includes('@')) {
+        // email
+        setNewCustomer(prev => ({ ...prev, email: customerSearchTerm }));
+      }
+    }
+  };
+
+  // Customer handling functions
+  const handleCreateCustomer = async () => {
+    // Validate required fields
+    if (!newCustomer.fullName || !newCustomer.email || !newCustomer.phone || !newCustomer.vatNumber) {
+      alert("Please fill in all required customer fields (Name, Email, Phone, VAT Number)");
+      return;
+    }
+
+    try {
+      const customerData = {
+        fullName: newCustomer.fullName,
+        email: newCustomer.email,
+        phone: newCustomer.phone,
+        vatNumber: newCustomer.vatNumber,
+        address: newCustomer.address,
+        vehicle_number: newCustomer.vehicle_number,
+        vehicle_model: newCustomer.vehicle_model,
+        year_of_manufacture: newCustomer.year_of_manufacture
+      };
+
+      const createdCustomer = await invoiceService.createCustomer(customerData);
+      setSelectedCustomer(createdCustomer);
+      onCustomerIdChange(createdCustomer._id, createdCustomer);
+      setCreatingCustomer(false);
+      
+      // Refresh customer list
+      const customers = await invoiceService.getAllCustomers();
+      setAllCustomers(customers);
+      setCustomerSearchTerm(`${createdCustomer.fullName} (${createdCustomer.phone})`);
+      
+      alert("Customer created successfully!");
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert(error instanceof Error ? error.message : "Failed to create customer");
+    }
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!selectedCustomer) return;
+    
+    // Validate required fields
+    if (!newCustomer.fullName || !newCustomer.email || !newCustomer.phone || !newCustomer.vatNumber) {
+      alert("Please fill in all required customer fields (Name, Email, Phone, VAT Number)");
+      return;
+    }
+
+    try {
+      const customerData = {
+        fullName: newCustomer.fullName,
+        email: newCustomer.email,
+        phone: newCustomer.phone,
+        vatNumber: newCustomer.vatNumber,
+        address: newCustomer.address,
+        vehicle_number: newCustomer.vehicle_number,
+        vehicle_model: newCustomer.vehicle_model,
+        year_of_manufacture: newCustomer.year_of_manufacture
+      };
+
+      const updatedCustomer = await invoiceService.updateCustomer(selectedCustomer._id, customerData);
+      setSelectedCustomer(updatedCustomer);
+      onCustomerIdChange(updatedCustomer._id, updatedCustomer);
+      setEditingCustomer(false);
+      
+      // Refresh customer list
+      const customers = await invoiceService.getAllCustomers();
+      setAllCustomers(customers);
+      setCustomerSearchTerm(`${updatedCustomer.fullName} (${updatedCustomer.phone})`);
+      
+      alert("Customer updated successfully!");
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      alert(error instanceof Error ? error.message : "Failed to update customer");
+    }
+  };
+
+  // Clear customer selection
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    onCustomerIdChange("");
+    setCustomerSearchTerm("");
+    resetNewCustomerForm();
+    setEditingCustomer(false);
+    setViewingCustomer(false);
+  };
 
   return (
     <div className="space-y-6">
       <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
         <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Invoice</h2>
         
-        {/* Customer Information */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Customer name*
-            </label>
-            <input
-              type="text"
-              value={invoiceData.customer.name}
-              onChange={(e) => onCustomerChange('name', e.target.value)}
-              placeholder="Customer Name"
-              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+        {/* Customer Search/Create */}
+        <div className="space-y-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-md font-semibold text-gray-200">Customer Information</h3>
+            {selectedCustomer && (
+              <div className="flex items-center gap-2 text-green-400 text-sm">
+                <User className="w-4 h-4" />
+                <span>Customer: {selectedCustomer.fullName}</span>
+                <div className="flex items-center gap-1 ml-2">
+                  <button
+                    onClick={handleViewCustomer}
+                    className="p-1 hover:bg-[#0f172a] rounded transition text-green-400"
+                    title="View Customer Details"
+                  >
+                    <Eye className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={handleEditCustomer}
+                    className="p-1 hover:bg-[#0f172a] rounded transition text-green-400"
+                    title="Edit Customer Details"
+                  >
+                    <Edit className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Customer Email*
+          <div className="customer-search-container">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-300">
+                Search Customer*
               </label>
-              <input
-                type="email"
-                value={invoiceData.customer.email}
-                onChange={(e) => onCustomerChange('email', e.target.value)}
-                placeholder="customer@email.com"
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+              <button
+                onClick={handleOpenCreateCustomer}
+                className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition"
+              >
+                <UserPlus className="w-3 h-3" />
+                Add New Customer
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Customer Phone*
-              </label>
-              <input
-                type="tel"
-                value={invoiceData.customer.phone}
-                onChange={(e) => onCustomerChange('phone', e.target.value)}
-                placeholder="+94 XXX XXX XXX"
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Customer Address
-            </label>
-            <textarea
-              value={invoiceData.customer.address || ''}
-              onChange={(e) => onCustomerChange('address', e.target.value)}
-              placeholder="Enter customer address"
-              rows={2}
-              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Customer Additional Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                VAT Number
-              </label>
+            
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                value={invoiceData.customer.vat_number || ''}
-                onChange={(e) => onCustomerChange('vat_number', e.target.value)}
-                placeholder="VAT Number"
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Vehicle Number
-              </label>
-              <input
-                type="text"
-                value={invoiceData.customer.vehicle_number || ''}
-                onChange={(e) => onCustomerChange('vehicle_number', e.target.value)}
-                placeholder="Vehicle Number"
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Vehicle Model
-              </label>
-              <input
-                type="text"
-                value={invoiceData.customer.vehicle_model || ''}
-                onChange={(e) => onCustomerChange('vehicle_model', e.target.value)}
-                placeholder="Vehicle Model"
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Year of Manufacture
-              </label>
-              <input
-                type="number"
-                value={invoiceData.customer.year_of_manufacture || ''}
+                value={customerSearchTerm}
                 onChange={(e) => {
-                  const value = e.target.value === '' ? undefined : parseInt(e.target.value);
-                  onCustomerChange('year_of_manufacture', value);
+                  const value = e.target.value;
+                  setCustomerSearchTerm(value);
+                  if (value.trim().length >= 2) {
+                    setShowCustomerSuggestions(true);
+                  } else {
+                    setShowCustomerSuggestions(false);
+                  }
                 }}
-                placeholder="Year"
-                min="1900"
-                max={new Date().getFullYear() + 1}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onFocus={() => {
+                  if (customerSearchTerm.trim().length >= 2 && filteredCustomers.length > 0) {
+                    setShowCustomerSuggestions(true);
+                  }
+                }}
+                placeholder="Type to search customers..."
+                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg pl-10 pr-10 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {customerSearchTerm && (
+                <button
+                  onClick={handleClearCustomer}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              
+              {/* Customer Search Suggestions Dropdown */}
+              {showCustomerSuggestions && customerSearchTerm.trim().length >= 2 && (
+                <div className="absolute z-20 w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredCustomers.length === 0 ? (
+                    <div className="px-3 py-2 text-gray-400 text-sm italic border-b border-[#334155]">
+                      No customers found "{customerSearchTerm}"
+                    </div>
+                  ) : (
+                    filteredCustomers.map((customer) => (
+                      <div
+                        key={customer._id}
+                        className="px-3 py-2 hover:bg-[#1e293b] cursor-pointer border-b border-[#334155] last:border-b-0 transition-colors duration-150"
+                        onClick={() => handleCustomerSelect(customer)}
+                      >
+                        <div className="font-medium text-white">{customer.fullName || 'Unnamed Customer'}</div>
+                        <div className="text-sm text-gray-400 flex justify-between mt-1">
+                          <span>Phone: {customer.phone || 'N/A'}</span>
+                          <span className="text-blue-400">{customer.email || 'No email'}</span>
+                        </div>
+                        {customer.address && (customer.address.street || customer.address.city) && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Address: {customer.address.street} {customer.address.city} {customer.address.country}
+                          </div>
+                        )}
+                        {customer.vehicle_number && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Vehicle: {customer.vehicle_number} {customer.vehicle_model && `(${customer.vehicle_model})`}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Search by phone number, name, or email.
             </div>
           </div>
 
+          {/* Customer View Modal */}
+          {viewingCustomer && selectedCustomer && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-[#0f172a] border border-[#334155] rounded-lg w-full max-w-md p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-white">Customer Details</h3>
+                  <button
+                    onClick={() => setViewingCustomer(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-400">Full Name</div>
+                      <div className="text-white font-medium">{selectedCustomer.fullName}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-400">Email</div>
+                      <div className="text-white font-medium">{selectedCustomer.email}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-400">Phone</div>
+                      <div className="text-white font-medium">{selectedCustomer.phone}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-400">VAT Number</div>
+                      <div className="text-white font-medium">{selectedCustomer.vatNumber}</div>
+                    </div>
+                  </div>
+                  
+                  {selectedCustomer.address && (
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Address</div>
+                      <div className="text-white">
+                        {selectedCustomer.address.street && <div>{selectedCustomer.address.street}</div>}
+                        <div>
+                          {selectedCustomer.address.city && `${selectedCustomer.address.city}, `}
+                          {selectedCustomer.address.country && `${selectedCustomer.address.country} `}
+                          {selectedCustomer.address.zip && selectedCustomer.address.zip}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {(selectedCustomer.vehicle_number || selectedCustomer.vehicle_model || selectedCustomer.year_of_manufacture) && (
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Vehicle Details</div>
+                      <div className="text-white">
+                        {selectedCustomer.vehicle_number && <div>Number: {selectedCustomer.vehicle_number}</div>}
+                        {selectedCustomer.vehicle_model && <div>Model: {selectedCustomer.vehicle_model}</div>}
+                        {selectedCustomer.year_of_manufacture && <div>Year: {selectedCustomer.year_of_manufacture}</div>}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end gap-3 pt-4 border-t border-[#334155]">
+                    <button
+                      onClick={() => setViewingCustomer(false)}
+                      className="px-4 py-2 text-gray-300 hover:text-white transition"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewingCustomer(false);
+                        handleEditCustomer();
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Edit Customer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Customer Create/Edit Form */}
+          {(creatingCustomer || editingCustomer) && (
+            <div className="bg-[#0f172a] border border-[#334155] rounded-lg p-4 mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-white flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  {editingCustomer ? 'Edit Customer' : 'Create New Customer'}
+                </h4>
+                <button
+                  onClick={() => {
+                    setCreatingCustomer(false);
+                    setEditingCustomer(false);
+                    resetNewCustomerForm();
+                  }}
+                  className="text-red-400 hover:text-red-300 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Full Name*
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.fullName}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, fullName: e.target.value }))}
+                      placeholder="Customer Full Name"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Email*
+                    </label>
+                    <input
+                      type="email"
+                      value={newCustomer.email}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="customer@email.com"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Phone*
+                    </label>
+                    <input
+                      type="tel"
+                      value={newCustomer.phone}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="10-digit phone number"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      VAT Number*
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.vatNumber}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, vatNumber: e.target.value }))}
+                      placeholder="VAT Number"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Address
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomer.address.street}
+                    onChange={(e) => setNewCustomer(prev => ({ 
+                      ...prev, 
+                      address: { ...prev.address, street: e.target.value }
+                    }))}
+                    placeholder="Street Address"
+                    className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                  />
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={newCustomer.address.city}
+                      onChange={(e) => setNewCustomer(prev => ({ 
+                        ...prev, 
+                        address: { ...prev.address, city: e.target.value }
+                      }))}
+                      placeholder="City"
+                      className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={newCustomer.address.country}
+                      onChange={(e) => setNewCustomer(prev => ({ 
+                        ...prev, 
+                        address: { ...prev.address, country: e.target.value }
+                      }))}
+                      placeholder="Country"
+                      className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={newCustomer.address.zip}
+                      onChange={(e) => setNewCustomer(prev => ({ 
+                        ...prev, 
+                        address: { ...prev.address, zip: e.target.value }
+                      }))}
+                      placeholder="ZIP"
+                      className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Vehicle Number
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.vehicle_number}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, vehicle_number: e.target.value }))}
+                      placeholder="Vehicle Number"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Vehicle Model
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustomer.vehicle_model}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, vehicle_model: e.target.value }))}
+                      placeholder="Vehicle Model"
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Year of Manufacture
+                    </label>
+                    <input
+                      type="number"
+                      value={newCustomer.year_of_manufacture || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                        setNewCustomer(prev => ({ ...prev, year_of_manufacture: value }));
+                      }}
+                      placeholder="Year"
+                      min="1900"
+                      max={new Date().getFullYear() + 1}
+                      className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={editingCustomer ? handleUpdateCustomer : handleCreateCustomer}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {editingCustomer ? 'Update Customer' : 'Create Customer'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Invoice Details */}
+        <div className="space-y-4">
           {/* Dates */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -381,18 +922,56 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
           )}
 
-          {/* Discount */}
+          {/* Vehicle Number */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Discount (LKR)
+              Vehicle Number*
             </label>
             <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={invoiceData.discount}
-              onChange={(e) => onFieldChange('discount', parseFloat(e.target.value) || 0)}
+              type="text"
+              value={invoiceData.vehicleNumber || ''}
+              onChange={(e) => onFieldChange('vehicleNumber', e.target.value)}
+              placeholder="Vehicle Number"
               className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          {/* Discount Percentage */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Discount (%)
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={invoiceData.discountPercentage}
+                onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+              />
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                %
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Discount Amount: <span className="text-green-400">LKR {discountAmount.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Notes
+            </label>
+            <textarea
+              value={invoiceData.notes || ''}
+              onChange={(e) => onFieldChange('notes', e.target.value)}
+              placeholder="Additional notes..."
+              rows={3}
+              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -402,7 +981,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
         <h3 className="text-lg font-semibold text-gray-200 mb-4">Add Item</h3>
         
-        <div className="space-y-4 search-container">
+        <div className="space-y-4 item-search-container">
           {/* Item Search */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -661,8 +1240,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               <span className="text-yellow-400 font-medium">LKR {tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-300">Discount:</span>
-              <span className="text-red-400 font-medium">- LKR {invoiceData.discount.toFixed(2)}</span>
+              <span className="text-gray-300">Discount ({invoiceData.discountPercentage}%):</span>
+              <span className="text-red-400 font-medium">- LKR {discountAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-lg font-semibold pt-2 border-t border-[#334155]">
               <span className="text-gray-200">Total Amount:</span>

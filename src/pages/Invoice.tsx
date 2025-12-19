@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Save, Menu, X } from "lucide-react";
+import { User, FileText, Download, Printer, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type { 
   InvoiceData, 
   InvoiceItem, 
-  InvoiceCustomer,
+  BackendInvoiceData,
   PaymentStatusType,
   PaymentMethodType 
 } from "../types/invoice";
@@ -19,27 +19,6 @@ import jsPDF from "jspdf";
 import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
-
-interface BackendInvoiceData {
-  customer: InvoiceCustomer;
-  items: Array<{
-    item: string;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-  }>;
-  subTotal: number;
-  discount: number;
-  totalAmount: number;
-  paymentStatus: PaymentStatusType;
-  paymentMethod: PaymentMethodType;
-  issueDate: string;
-  dueDate: string;
-  bankDepositDate?: string;
-  notes?: string;
-  bankAccount?: string;
-  accountName?: string;
-}
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -56,27 +35,19 @@ const Invoice: React.FC = () => {
 
   const [invoiceData, setInvoiceData] = useState<InvoiceData>({
     invoiceId: "",
-    customer: {
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-      vat_number: "",
-      vehicle_number: "",
-      vehicle_model: "",
-      year_of_manufacture: undefined,
-    },
+    customer: "",
+    customerDetails: undefined,
     items: [],
     subTotal: 0,
     discount: 0,
+    discountPercentage: 0,
     totalAmount: 0,
     paymentStatus: PaymentStatus.PENDING,
     paymentMethod: PaymentMethod.CASH,
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    vehicleNumber: "",
     notes: "",
-    bankAccount: "12356587965497",
-    accountName: "YOUR NAME"
   });
 
   useEffect(() => {
@@ -181,13 +152,15 @@ const Invoice: React.FC = () => {
     }
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
     const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
+    const totalAmount = subTotal + tax - discountAmount;
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
+      discount: discountAmount,
       totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
@@ -195,13 +168,15 @@ const Invoice: React.FC = () => {
   const handleRemoveItem = (id: string) => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
     const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
+    const totalAmount = subTotal + tax - discountAmount;
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
+      discount: discountAmount,
       totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
@@ -219,13 +194,15 @@ const Invoice: React.FC = () => {
     });
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
     const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
+    const totalAmount = subTotal + tax - discountAmount;
 
     setInvoiceData(prev => ({
       ...prev,
       items: newItems,
       subTotal,
+      discount: discountAmount,
       totalAmount: totalAmount > 0 ? totalAmount : 0
     }));
   };
@@ -234,119 +211,27 @@ const Invoice: React.FC = () => {
     setInvoiceData(prev => {
       const updated = { ...prev, [field]: value };
       
-      if (field === 'discount') {
+      if (field === 'discountPercentage') {
+        const discountAmount = prev.subTotal * (Number(value) / 100);
         const tax = prev.subTotal * 0.18;
-        const totalAmount = prev.subTotal + tax - (Number(value) || 0);
-        return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
+        const totalAmount = prev.subTotal + tax - discountAmount;
+        return { 
+          ...updated, 
+          discount: discountAmount,
+          totalAmount: totalAmount > 0 ? totalAmount : 0 
+        };
       }
       
       return updated;
     });
   };
 
-  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string | number | undefined) => {
+  const handleCustomerIdChange = (customerId: string, customerDetails?: any) => {
     setInvoiceData(prev => ({
       ...prev,
-      customer: {
-        ...prev.customer,
-        [field]: value
-      }
+      customer: customerId,
+      customerDetails: customerDetails
     }));
-  };
-
-  const handleSaveInvoice = async () => {
-    // Validate required fields
-    if (!invoiceData.customer.name || !invoiceData.customer.email || !invoiceData.customer.phone) {
-      setAlert({
-        type: 'error',
-        message: "Please fill in all required customer fields"
-      });
-      return;
-    }
-
-    if (invoiceData.items.length === 0) {
-      setAlert({
-        type: 'error',
-        message: "Please add at least one item to the invoice"
-      });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      
-      // Calculate final totals with tax
-      const tax = invoiceData.subTotal * 0.18;
-      const finalTotalAmount = invoiceData.subTotal + tax - invoiceData.discount;
-      
-      const itemsForBackend = invoiceData.items.map(item => ({
-        item: item.item,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.total
-      }));
-
-      const invoiceForBackend: BackendInvoiceData = {
-        customer: invoiceData.customer,
-        items: itemsForBackend,
-        subTotal: invoiceData.subTotal,
-        discount: invoiceData.discount,
-        totalAmount: finalTotalAmount > 0 ? finalTotalAmount : 0,
-        paymentStatus: invoiceData.paymentStatus,
-        paymentMethod: invoiceData.paymentMethod,
-        issueDate: new Date(invoiceData.issueDate).toISOString(),
-        dueDate: new Date(invoiceData.dueDate).toISOString(),
-        bankDepositDate: invoiceData.bankDepositDate 
-          ? new Date(invoiceData.bankDepositDate).toISOString()
-          : undefined,
-        notes: invoiceData.notes,
-        bankAccount: invoiceData.bankAccount,
-        accountName: invoiceData.accountName
-      };
-
-      const savedInvoice = await invoiceService.create(invoiceForBackend as Partial<InvoiceData>);
-      
-      setAlert({
-        type: 'success',
-        message: `Invoice ${savedInvoice.invoiceId} saved successfully!`
-      });
-
-      setInvoiceData(prev => ({
-        ...prev,
-        invoiceId: savedInvoice.invoiceId,
-        _id: savedInvoice._id
-      }));
-
-      // Get next invoice ID 
-      const nextId = await invoiceService.getNextId();
-      setInvoiceData(prev => ({ 
-        ...prev, 
-        invoiceId: nextId,
-        items: [],
-        subTotal: 0,
-        discount: 0,
-        totalAmount: 0,
-        customer: {
-          name: "",
-          email: "",
-          phone: "",
-          address: "",
-          vat_number: "",
-          vehicle_number: "",
-          vehicle_model: "",
-          year_of_manufacture: undefined,
-        }
-      }));
-
-    } catch (error) {
-      console.error('Error saving invoice:', error);
-      setAlert({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to save invoice'
-      });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const downloadPDF = async () => {
@@ -487,7 +372,6 @@ const Invoice: React.FC = () => {
         onclone: (clonedDoc: Document) => {
           const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
           if (clonedContainer) {
-            
             (clonedContainer as HTMLElement).style.transform = 'none';
             (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
             (clonedContainer as HTMLElement).style.width = '210mm';
@@ -642,20 +526,6 @@ const Invoice: React.FC = () => {
             <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
               Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
             </div>
-            <button
-              onClick={handleSaveInvoice}
-              disabled={isLoading}
-              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <Save className="w-3 h-3 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Save</span>
-                </>
-              )}
-            </button>
             <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
@@ -694,7 +564,7 @@ const Invoice: React.FC = () => {
                 <InvoiceForm
                   invoiceData={invoiceData}
                   onFieldChange={handleFieldChange}
-                  onCustomerChange={handleCustomerChange}
+                  onCustomerIdChange={handleCustomerIdChange}
                   onAddItem={handleAddItem}
                   onRemoveItem={handleRemoveItem}
                   onUpdateItem={handleUpdateItem}

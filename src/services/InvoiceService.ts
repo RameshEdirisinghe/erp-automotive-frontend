@@ -1,43 +1,11 @@
 import api from "../api/axios";
 import type { 
-  InvoiceData, 
+  InvoiceResponse,
+  BackendInvoiceData,
   PaymentStatusType,
-  PaymentMethodType 
+  InvoiceCustomer 
 } from "../types/invoice";
 import type { InventoryItem } from "../types/inventory"; 
-
-export interface InvoiceResponse {
-  _id: string;
-  invoiceId: string;
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-    address?: string;
-    vat_number?: string;
-    vehicle_number?: string;
-    vehicle_model?: string;
-    year_of_manufacture?: number;
-  };
-  items: Array<{
-    item: InventoryItem;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-    _id?: string;
-  }>;
-  subTotal: number;
-  discount: number;
-  totalAmount: number;
-  paymentStatus: PaymentStatusType;
-  paymentMethod: PaymentMethodType;
-  bankDepositDate?: string;
-  issueDate: string;
-  dueDate: string;
-  notes?: string;
-  created_at?: string;
-  updated_at?: string;
-}
 
 export interface NextInvoiceIdResponse {
   nextInvoiceId: string;
@@ -73,6 +41,17 @@ export const invoiceService = {
         throw new Error(error.message);
       }
       throw new Error("Failed to fetch invoices");
+    }
+  },
+
+  // Get all customers
+  async getAllCustomers(): Promise<InvoiceCustomer[]> {
+    try {
+      const response = await api.get<InvoiceCustomer[]>("/customers");
+      return response.data;
+    } catch (error: unknown) {
+      console.error('Error fetching customers:', error);
+      return [];
     }
   },
 
@@ -116,7 +95,7 @@ export const invoiceService = {
   },
 
   // Create new invoice
-  async create(invoiceData: Partial<InvoiceData>): Promise<InvoiceResponse> {
+  async create(invoiceData: BackendInvoiceData): Promise<InvoiceResponse> {
     try {
       const response = await api.post<InvoiceResponse>("/invoices", invoiceData);
       return response.data;
@@ -129,7 +108,7 @@ export const invoiceService = {
   },
 
   // Update invoice
-  async update(id: string, updateData: Partial<InvoiceData>): Promise<InvoiceResponse> {
+  async update(id: string, updateData: Partial<BackendInvoiceData>): Promise<InvoiceResponse> {
     try {
       const response = await api.put<InvoiceResponse>(`/invoices/${id}`, updateData);
       return response.data;
@@ -189,6 +168,42 @@ export const invoiceService = {
       console.error('Error fetching inventory items:', error);
       return [];
     }
+  },
+
+  // Search or create customer
+  async searchCustomer(phone: string) {
+    try {
+      const response = await api.get(`/customers/phone/${phone}`);
+      return response.data;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  // Create new customer
+  async createCustomer(customerData: Omit<InvoiceCustomer, '_id' | 'customerCode'>) {
+    try {
+      const response = await api.post("/customers", customerData);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Failed to create customer";
+      throw new Error(errorMessage);
+    }
+  },
+
+  // Update customer
+  async updateCustomer(customerId: string, customerData: Omit<InvoiceCustomer, '_id' | 'customerCode'>) {
+    try {
+      const response = await api.put(`/customers/${customerId}`, customerData);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Failed to update customer";
+      throw new Error(errorMessage);
+    }
   }
 };
 
@@ -202,3 +217,4 @@ export const updateInvoicePaymentStatus = invoiceService.updatePaymentStatus;
 export const deleteInvoice = invoiceService.delete;
 export const getSalesOverview = invoiceService.getSalesOverview;
 export const getInventoryItems = invoiceService.getInventoryItems;
+export const getAllCustomers = invoiceService.getAllCustomers;
