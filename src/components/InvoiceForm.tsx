@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Search, AlertCircle, UserPlus, User, X, Edit, Eye } from "lucide-react";
 import type { InvoiceData, InvoiceItem } from "../types/invoice";
-import type { InventoryItem } from "../types/inventory"; 
+import type { InventoryItem } from "../types/inventory";
 import { PaymentMethod, PaymentStatus } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
 
@@ -81,20 +81,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     year_of_manufacture: undefined as number | undefined
   });
 
-  // Calculate totals
-  useEffect(() => {
-    const subTotal = invoiceData.items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - discountAmount;
-    
-    // Update the discount amount in the invoice data
-    if (Math.abs(invoiceData.discount - discountAmount) > 0.01) {
-      onFieldChange('discount', parseFloat(discountAmount.toFixed(2)));
-    }
-    onFieldChange('subTotal', parseFloat(subTotal.toFixed(2)));
-    onFieldChange('totalAmount', parseFloat(Math.max(totalAmount, 0).toFixed(2)));
-  }, [invoiceData.items, invoiceData.discountPercentage, invoiceData.discount, onFieldChange]);
+  // --- FIXED: Removed the useEffect that was causing the infinite loop ---
+  // The parent component (Invoice.tsx) handles the math for subTotal/totalAmount
+  // when items are added/removed/updated. We do NOT need to sync it back here.
 
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
@@ -315,17 +304,19 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     };
   }, []);
 
-  // Calculate totals 
-  const calculateTotals = () => {
-    const subTotal = invoiceData.items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - discountAmount;
+  // Calculate totals for DISPLAY ONLY
+  // We use the invoiceData props directly to ensure what we see is what is in the parent state
+  const calculateDisplayTotals = () => {
+    const subTotal = invoiceData.subTotal;
+    const discountAmount = invoiceData.discount;
+    // Recalculate tax just for display sanity check or use from state if you store it
+    const tax = subTotal * 0.18; 
+    const totalAmount = invoiceData.totalAmount;
     
     return { subTotal, tax, discountAmount, totalAmount };
   };
 
-  const { subTotal, tax, discountAmount, totalAmount } = calculateTotals();
+  const { subTotal, tax, discountAmount, totalAmount } = calculateDisplayTotals();
 
   const handleDiscountPercentageChange = (value: string) => {
     const percentage = parseFloat(value) || 0;

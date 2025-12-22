@@ -82,19 +82,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     year_of_manufacture: undefined as number | undefined
   });
 
-  // Calculate totals
-  useEffect(() => {
-    const subTotal = quotationData.items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount = subTotal * (quotationData.discountPercentage / 100);
-    const totalAmount = subTotal - discountAmount;
-    
-    // Update the discount amount in the quotation data
-    if (Math.abs(quotationData.discount - discountAmount) > 0.01) {
-      onFieldChange('discount', parseFloat(discountAmount.toFixed(2)));
-    }
-    onFieldChange('subTotal', parseFloat(subTotal.toFixed(2)));
-    onFieldChange('totalAmount', parseFloat(Math.max(totalAmount, 0).toFixed(2)));
-  }, [quotationData.items, quotationData.discountPercentage, quotationData.discount, onFieldChange]);
+  // --- FIXED: Removed the useEffect that was causing the infinite loop ---
+  // The parent component (Quotation.tsx) handles the math for subTotal/totalAmount
+  // when items are added/removed/updated. We do NOT need to sync it back here.
 
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
@@ -314,11 +304,13 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     };
   }, []);
 
-  // Calculate totals 
+  // Calculate totals for DISPLAY ONLY
+  // We use the derived values for the summary section, preventing the need to sync state
   const calculateTotals = () => {
-    const subTotal = quotationData.items.reduce((sum, item) => sum + item.total, 0);
-    const discountAmount = subTotal * (quotationData.discountPercentage / 100);
-    const totalAmount = subTotal - discountAmount;
+    // We trust the props passed down from the parent
+    const subTotal = quotationData.subTotal;
+    const discountAmount = quotationData.discount;
+    const totalAmount = quotationData.totalAmount;
     
     return { subTotal, discountAmount, totalAmount };
   };
