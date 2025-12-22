@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Save, Menu, X } from "lucide-react";
+import { User, FileText, Download, Printer, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type { 
   InvoiceData, 
-  InvoiceItem, 
-  InvoiceCustomer,
-  PaymentStatusType,
-  PaymentMethodType 
+  InvoiceItem,
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
@@ -20,26 +17,110 @@ import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
 
-interface BackendInvoiceData {
-  customer: InvoiceCustomer;
-  items: Array<{
-    item: string;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-  }>;
-  subTotal: number;
-  discount: number;
-  totalAmount: number;
-  paymentStatus: PaymentStatusType;
-  paymentMethod: PaymentMethodType;
-  issueDate: string;
-  dueDate: string;
-  bankDepositDate?: string;
-  notes?: string;
-  bankAccount?: string;
-  accountName?: string;
-}
+const TAX_RATE = 0.18;
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+const PX_PER_MM = 3.78;
+const CANVAS_WIDTH = Math.round(A4_WIDTH_MM * PX_PER_MM);
+const CANVAS_HEIGHT = Math.round(A4_HEIGHT_MM * PX_PER_MM);
+const IMAGE_STABILIZE_DELAY_MS = 300;
+
+const calculateInvoiceTotals = (items: InvoiceItem[], discountPercentage: number) => {
+  const subTotal = items.reduce((sum, current) => sum + current.total, 0);
+  const discount = subTotal * (discountPercentage / 100);
+  const tax = subTotal * TAX_RATE;
+  const totalAmount = Math.max(subTotal + tax - discount, 0);
+
+  return {
+    subTotal,
+    discount,
+    totalAmount,
+  };
+};
+
+const wait = (duration: number) => new Promise<void>(resolve => setTimeout(resolve, duration));
+
+const ensureImagesReady = async (container: HTMLElement) => {
+  const images = container.getElementsByTagName('img');
+  const imagePromises = Array.from(images).map(img => {
+    if (img.complete) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>(resolve => {
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+    });
+  });
+
+  await Promise.all(imagePromises);
+};
+
+const captureInvoiceCanvas = async (
+  container: HTMLDivElement,
+  { fullScale = false }: { fullScale?: boolean } = {}
+) => {
+  const originalStyles = fullScale
+    ? {
+        transform: container.style.transform,
+        transformOrigin: container.style.transformOrigin,
+        width: container.style.width,
+        height: container.style.height,
+        position: container.style.position,
+        left: container.style.left,
+        top: container.style.top,
+        zIndex: container.style.zIndex,
+      }
+    : null;
+
+  if (fullScale) {
+    Object.assign(container.style, {
+      transform: 'none',
+      transformOrigin: 'top left',
+      width: `${A4_WIDTH_MM}mm`,
+      height: `${A4_HEIGHT_MM}mm`,
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      zIndex: '9999',
+    });
+
+    void container.offsetHeight;
+  }
+
+  try {
+    await ensureImagesReady(container);
+
+    if (fullScale) {
+      await wait(IMAGE_STABILIZE_DELAY_MS);
+    }
+
+    return await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
+      onclone: (clonedDoc: Document) => {
+        const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
+        if (clonedContainer instanceof HTMLElement) {
+          Object.assign(clonedContainer.style, {
+            transform: 'none',
+            transformOrigin: 'top left',
+            width: `${A4_WIDTH_MM}mm`,
+            height: `${A4_HEIGHT_MM}mm`,
+          });
+        }
+      },
+    });
+  } finally {
+    if (fullScale && originalStyles) {
+      Object.assign(container.style, originalStyles);
+    }
+  }
+};
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -56,27 +137,19 @@ const Invoice: React.FC = () => {
 
   const [invoiceData, setInvoiceData] = useState<InvoiceData>({
     invoiceId: "",
-    customer: {
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-      vat_number: "",
-      vehicle_number: "",
-      vehicle_model: "",
-      year_of_manufacture: undefined,
-    },
+    customer: "",
+    customerDetails: undefined,
     items: [],
     subTotal: 0,
     discount: 0,
+    discountPercentage: 0,
     totalAmount: 0,
     paymentStatus: PaymentStatus.PENDING,
     paymentMethod: PaymentMethod.CASH,
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    vehicleNumber: "",
     notes: "",
-    bankAccount: "12356587965497",
-    accountName: "YOUR NAME"
   });
 
   useEffect(() => {
@@ -95,44 +168,54 @@ const Invoice: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const calculateInitialScale = () => {
-      if (rightPanelRef.current && !isMobileView) {
-        const panelWidth = rightPanelRef.current.clientWidth;
-        const panelHeight = rightPanelRef.current.clientHeight;
-        const a4Width = 210 * 3.78;
-        const a4Height = 297 * 3.78;
-        
-        const availableWidth = panelWidth - (isMobileView ? 24 : 48);
-        const availableHeight = panelHeight - (isMobileView ? 100 : 120);
-        
-        const widthScale = availableWidth / a4Width;
-        const heightScale = availableHeight / a4Height;
-        
-        const calculatedScale = Math.min(widthScale, heightScale);
-        setScale(Math.max(calculatedScale, isMobileView ? 0.2 : 0.3));
+  const calculateInitialScale = () => {
+    if (!rightPanelRef.current || isMobileView) return;
+
+    const panelWidth = rightPanelRef.current.clientWidth;
+    const panelHeight = rightPanelRef.current.clientHeight;
+
+    const a4Width = A4_WIDTH_MM * PX_PER_MM;
+    const a4Height = A4_HEIGHT_MM * PX_PER_MM;
+
+    const availableWidth = panelWidth - 48;
+    const availableHeight = panelHeight - 120;
+
+    const widthScale = availableWidth / a4Width;
+    const heightScale = availableHeight / a4Height;
+
+    const newScale = Math.max(
+      Math.min(widthScale, heightScale),
+      0.3
+    );
+
+    setScale(prev => {
+      if (Math.abs(prev - newScale) < 0.01) {
+        return prev;
       }
-    };
+      return newScale;
+    });
+  };
 
-    calculateInitialScale();
-    const resizeObserver = new ResizeObserver(calculateInitialScale);
-    if (rightPanelRef.current) {
-      resizeObserver.observe(rightPanelRef.current);
-    }
-    
-    return () => resizeObserver.disconnect();
-  }, [isMobileView]);
+  calculateInitialScale();
 
-  // Load inventory items and generate next invoice ID
+  const resizeObserver = new ResizeObserver(calculateInitialScale);
+
+  if (rightPanelRef.current) {
+    resizeObserver.observe(rightPanelRef.current);
+  }
+
+  return () => resizeObserver.disconnect();
+}, [isMobileView]);
+
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
         
-        // Load inventory items
         const items = await inventoryService.getAll();
         setInventoryItems(items as InvoiceInventoryItem[]);
         
-        // Get next invoice ID from backend
         const nextId = await invoiceService.getNextId();
         setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
         
@@ -151,202 +234,112 @@ const Invoice: React.FC = () => {
   }, []);
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
-    const total = item.quantity * item.unitPrice;
-    
-    // Check if item already exists
-    const existingItemIndex = invoiceData.items.findIndex(
-      existing => existing.item === item.item
-    );
+    setInvoiceData(prev => {
+      const existingItemIndex = prev.items.findIndex(
+        existing => existing.item === item.item
+      );
 
-    let newItems;
-    
-    if (existingItemIndex !== -1) {
-      // Update existing item
-      newItems = [...invoiceData.items];
-      const existingItem = newItems[existingItemIndex];
-      const updatedItem = {
-        ...existingItem,
-        quantity: existingItem.quantity + item.quantity,
-        total: (existingItem.quantity + item.quantity) * existingItem.unitPrice
+      let updatedItems: InvoiceItem[];
+
+      if (existingItemIndex !== -1) {
+        const existingItem = prev.items[existingItemIndex];
+        const mergedItem: InvoiceItem = {
+          ...existingItem,
+          quantity: existingItem.quantity + item.quantity,
+          total: (existingItem.quantity + item.quantity) * existingItem.unitPrice,
+        };
+
+        updatedItems = prev.items.map((entry, index) =>
+          index === existingItemIndex ? mergedItem : entry
+        );
+      } else {
+        const newItem: InvoiceItem = {
+          ...item,
+          id: Date.now().toString(),
+          total: item.quantity * item.unitPrice,
+        };
+        updatedItems = [...prev.items, newItem];
+      }
+
+      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
+
+      return {
+        ...prev,
+        items: updatedItems,
+        ...totals,
       };
-      newItems[existingItemIndex] = updatedItem;
-    } else {
-      // Add new item
-      const newItem: InvoiceItem = {
-        ...item,
-        id: Date.now().toString(),
-        total
-      };
-      newItems = [...invoiceData.items, newItem];
-    }
-
-    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
-
-    setInvoiceData(prev => ({
-      ...prev,
-      items: newItems,
-      subTotal,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
-    }));
+    });
   };
 
   const handleRemoveItem = (id: string) => {
-    const newItems = invoiceData.items.filter(item => item.id !== id);
-    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
+    setInvoiceData(prev => {
+      const updatedItems = prev.items.filter(item => item.id !== id);
+      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
 
-    setInvoiceData(prev => ({
-      ...prev,
-      items: newItems,
-      subTotal,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
-    }));
+      return {
+        ...prev,
+        items: updatedItems,
+        ...totals,
+      };
+    });
   };
 
   const handleUpdateItem = (id: string, updates: Partial<InvoiceItem>) => {
-    const newItems = invoiceData.items.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, ...updates };
-        if (updates.quantity !== undefined || updates.unitPrice !== undefined) {
-          updatedItem.total = updatedItem.quantity * updatedItem.unitPrice;
+    setInvoiceData(prev => {
+      const updatedItems = prev.items.map(item => {
+        if (item.id !== id) {
+          return item;
         }
-        return updatedItem;
-      }
-      return item;
+
+        const quantity = updates.quantity ?? item.quantity;
+        const unitPrice = updates.unitPrice ?? item.unitPrice;
+
+        return {
+          ...item,
+          ...updates,
+          quantity,
+          unitPrice,
+          total: quantity * unitPrice,
+        };
+      });
+
+      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
+
+      return {
+        ...prev,
+        items: updatedItems,
+        ...totals,
+      };
     });
-
-    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
-    const tax = subTotal * 0.18;
-    const totalAmount = subTotal + tax - invoiceData.discount;
-
-    setInvoiceData(prev => ({
-      ...prev,
-      items: newItems,
-      subTotal,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
-    }));
   };
 
   const handleFieldChange = (field: keyof InvoiceData, value: string | number | boolean | Date) => {
     setInvoiceData(prev => {
-      const updated = { ...prev, [field]: value };
-      
-      if (field === 'discount') {
-        const tax = prev.subTotal * 0.18;
-        const totalAmount = prev.subTotal + tax - (Number(value) || 0);
-        return { ...updated, totalAmount: totalAmount > 0 ? totalAmount : 0 };
+      if (field === 'discountPercentage') {
+        const numericValue = typeof value === 'number' ? value : Number(value);
+        const discountPercentage = Number.isNaN(numericValue) ? 0 : numericValue;
+        const totals = calculateInvoiceTotals(prev.items, discountPercentage);
+
+        return {
+          ...prev,
+          discountPercentage,
+          ...totals,
+        };
       }
-      
-      return updated;
+
+      return {
+        ...prev,
+        [field]: value,
+      };
     });
   };
 
-  const handleCustomerChange = (field: keyof InvoiceCustomer, value: string | number | undefined) => {
+  const handleCustomerIdChange = (customerId: string, customerDetails?: any) => {
     setInvoiceData(prev => ({
       ...prev,
-      customer: {
-        ...prev.customer,
-        [field]: value
-      }
+      customer: customerId,
+      customerDetails: customerDetails
     }));
-  };
-
-  const handleSaveInvoice = async () => {
-    // Validate required fields
-    if (!invoiceData.customer.name || !invoiceData.customer.email || !invoiceData.customer.phone) {
-      setAlert({
-        type: 'error',
-        message: "Please fill in all required customer fields"
-      });
-      return;
-    }
-
-    if (invoiceData.items.length === 0) {
-      setAlert({
-        type: 'error',
-        message: "Please add at least one item to the invoice"
-      });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      
-      // Calculate final totals with tax
-      const tax = invoiceData.subTotal * 0.18;
-      const finalTotalAmount = invoiceData.subTotal + tax - invoiceData.discount;
-      
-      const itemsForBackend = invoiceData.items.map(item => ({
-        item: item.item,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.total
-      }));
-
-      const invoiceForBackend: BackendInvoiceData = {
-        customer: invoiceData.customer,
-        items: itemsForBackend,
-        subTotal: invoiceData.subTotal,
-        discount: invoiceData.discount,
-        totalAmount: finalTotalAmount > 0 ? finalTotalAmount : 0,
-        paymentStatus: invoiceData.paymentStatus,
-        paymentMethod: invoiceData.paymentMethod,
-        issueDate: new Date(invoiceData.issueDate).toISOString(),
-        dueDate: new Date(invoiceData.dueDate).toISOString(),
-        bankDepositDate: invoiceData.bankDepositDate 
-          ? new Date(invoiceData.bankDepositDate).toISOString()
-          : undefined,
-        notes: invoiceData.notes,
-        bankAccount: invoiceData.bankAccount,
-        accountName: invoiceData.accountName
-      };
-
-      const savedInvoice = await invoiceService.create(invoiceForBackend as Partial<InvoiceData>);
-      
-      setAlert({
-        type: 'success',
-        message: `Invoice ${savedInvoice.invoiceId} saved successfully!`
-      });
-
-      setInvoiceData(prev => ({
-        ...prev,
-        invoiceId: savedInvoice.invoiceId,
-        _id: savedInvoice._id
-      }));
-
-      // Get next invoice ID 
-      const nextId = await invoiceService.getNextId();
-      setInvoiceData(prev => ({ 
-        ...prev, 
-        invoiceId: nextId,
-        items: [],
-        subTotal: 0,
-        discount: 0,
-        totalAmount: 0,
-        customer: {
-          name: "",
-          email: "",
-          phone: "",
-          address: "",
-          vat_number: "",
-          vehicle_number: "",
-          vehicle_model: "",
-          year_of_manufacture: undefined,
-        }
-      }));
-
-    } catch (error) {
-      console.error('Error saving invoice:', error);
-      setAlert({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to save invoice'
-      });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const downloadPDF = async () => {
@@ -424,10 +417,8 @@ const Invoice: React.FC = () => {
       invoiceContainer.style.top = '';
       invoiceContainer.style.zIndex = '';
 
-      // Convert canvas to JPEG image
       const jpegData = canvas.toDataURL('image/jpeg', 1.0);
       
-      // Create PDF with A4 dimensions
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -445,10 +436,8 @@ const Invoice: React.FC = () => {
       const xPos = 0;
       const yPos = 0;
 
-      // Add JPEG image to PDF
       pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
       
-      // Save the PDF
       pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
 
       setAlert({
@@ -487,7 +476,6 @@ const Invoice: React.FC = () => {
         onclone: (clonedDoc: Document) => {
           const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
           if (clonedContainer) {
-            
             (clonedContainer as HTMLElement).style.transform = 'none';
             (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
             (clonedContainer as HTMLElement).style.width = '210mm';
@@ -496,10 +484,8 @@ const Invoice: React.FC = () => {
         }
       });
 
-      // Convert canvas to data URL
       const imageData = canvas.toDataURL('image/png', 1.0);
 
-      // Create print window
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         setAlert({
@@ -510,7 +496,6 @@ const Invoice: React.FC = () => {
         return;
       }
 
-      // Create HTML for printing
       const printHtml = `
         <!DOCTYPE html>
         <html>
@@ -588,12 +573,10 @@ const Invoice: React.FC = () => {
         </html>
       `;
 
-      // Write to print window
       printWindow.document.open();
       printWindow.document.write(printHtml);
       printWindow.document.close();
       
-      // Focus the window
       printWindow.focus();
 
       setIsGeneratingPDF(false);
@@ -613,7 +596,6 @@ const Invoice: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Alert */}
         {alert && (
           <CustomAlert
             type={alert.type}
@@ -623,7 +605,6 @@ const Invoice: React.FC = () => {
           />
         )}
 
-        {/* Header */}
         <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 md:px-6 shadow-lg">
           <div className="flex items-center gap-3">
             {isMobileView && (
@@ -642,20 +623,6 @@ const Invoice: React.FC = () => {
             <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
               Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
             </div>
-            <button
-              onClick={handleSaveInvoice}
-              disabled={isLoading}
-              className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <Save className="w-3 h-3 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Save</span>
-                </>
-              )}
-            </button>
             <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
@@ -680,7 +647,6 @@ const Invoice: React.FC = () => {
         )}
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel - Form */}
           <div className={`${isMobileView 
             ? (activePanel === 'form' ? 'w-full' : 'hidden') 
             : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
@@ -694,7 +660,7 @@ const Invoice: React.FC = () => {
                 <InvoiceForm
                   invoiceData={invoiceData}
                   onFieldChange={handleFieldChange}
-                  onCustomerChange={handleCustomerChange}
+                  onCustomerIdChange={handleCustomerIdChange}
                   onAddItem={handleAddItem}
                   onRemoveItem={handleRemoveItem}
                   onUpdateItem={handleUpdateItem}
@@ -704,14 +670,12 @@ const Invoice: React.FC = () => {
             )}
           </div>
 
-          {/* Right Panel - Canvas */}
           <div 
             ref={rightPanelRef}
             className={`${isMobileView 
               ? (activePanel === 'preview' ? 'w-full' : 'hidden') 
               : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
           >
-            {/* Header with controls */}
             <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                 <h2 className="text-base md:text-lg font-semibold text-gray-800">Invoice Preview</h2>
@@ -742,7 +706,6 @@ const Invoice: React.FC = () => {
               </div>
             </div>
 
-            {/* Canvas Container */}
             <div 
               ref={containerRef}
               className="flex-1 overflow-hidden bg-white flex items-center justify-center p-2 md:p-4"

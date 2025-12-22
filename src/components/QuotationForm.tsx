@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Search, AlertCircle, UserPlus, User, X, Edit, Eye } from "lucide-react";
-import type { InvoiceData, InvoiceItem } from "../types/invoice";
-import type { InventoryItem } from "../types/inventory";
-import { PaymentMethod, PaymentStatus } from "../types/invoice";
-import { invoiceService } from "../services/InvoiceService";
+import type { QuotationData, QuotationItem } from "../types/quotation";
+import type { InventoryItem } from "../types/inventory"; 
+import { PaymentMethod } from "../types/invoice";
+import { QuotationStatus } from "../types/quotation";
+import { quotationService } from "../services/QuotationService";
 
-interface InvoiceFormProps {
-  invoiceData: InvoiceData;
-  onFieldChange: (field: keyof InvoiceData, value: string | number | boolean | Date) => void;
+interface QuotationFormProps {
+  quotationData: QuotationData;
+  onFieldChange: (field: keyof QuotationData, value: string | number | boolean | Date) => void;
   onCustomerIdChange: (customerId: string, customerDetails?: Record<string, any>) => void;
-  onAddItem: (item: Omit<InvoiceItem, 'id' | 'total'>) => void;
+  onAddItem: (item: Omit<QuotationItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
-  onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
+  onUpdateItem: (id: string, updates: Partial<QuotationItem>) => void;
   inventoryItems: InventoryItem[];
 }
 
@@ -33,8 +34,8 @@ interface Customer {
   customerCode?: string;
 }
 
-const InvoiceForm: React.FC<InvoiceFormProps> = ({
-  invoiceData,
+const QuotationForm: React.FC<QuotationFormProps> = ({
+  quotationData,
   onFieldChange,
   onCustomerIdChange,
   onAddItem,
@@ -42,7 +43,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onUpdateItem,
   inventoryItems,
 }) => {
-  const [newItem, setNewItem] = useState<Omit<InvoiceItem, 'id' | 'total'>>({
+  const [newItem, setNewItem] = useState<Omit<QuotationItem, 'id' | 'total'>>({
     item: "",
     quantity: 1,
     unitPrice: 0,
@@ -82,7 +83,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   });
 
   // --- FIXED: Removed the useEffect that was causing the infinite loop ---
-  // The parent component (Invoice.tsx) handles the math for subTotal/totalAmount
+  // The parent component (Quotation.tsx) handles the math for subTotal/totalAmount
   // when items are added/removed/updated. We do NOT need to sync it back here.
 
   useEffect(() => {
@@ -93,7 +94,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       const selectedItem = inventoryItems.find(item => item.id === newItem.item);
       if (selectedItem) {
         // Calculate total quantity including already added items
-        const existingQuantity = invoiceData.items
+        const existingQuantity = quotationData.items
           .filter(item => item.item === newItem.item)
           .reduce((sum, item) => sum + item.quantity, 0);
         
@@ -106,14 +107,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         }
       }
     }
-  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems, invoiceData.items]);
+  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems, quotationData.items]);
 
   // Load all customers on component mount
   useEffect(() => {
     const loadCustomers = async () => {
       try {
         setLoadingCustomers(true);
-        const customers = await invoiceService.getAllCustomers();
+        const customers = await quotationService.getAllCustomers();
         setAllCustomers(customers);
       } catch (error) {
         console.error('Error loading customers:', error);
@@ -228,8 +229,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       return;
     }
 
-    // Check if item already exists in invoice
-    const existingItem = invoiceData.items.find(item => item.item === newItem.item);
+    // Check if item already exists in quotation
+    const existingItem = quotationData.items.find(item => item.item === newItem.item);
     
     if (existingItem) {
       // Update quantity of existing item
@@ -273,7 +274,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   };
 
   const handleUpdateItemQuantity = (id: string, newQuantity: number) => {
-    const item = invoiceData.items.find(item => item.id === id);
+    const item = quotationData.items.find(item => item.id === id);
     if (item) {
       const inventoryItem = inventoryItems.find(inv => inv.id === item.item);
       if (inventoryItem && newQuantity > inventoryItem.quantity) {
@@ -284,7 +285,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   };
 
-  // Handle click outside for both search dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -305,18 +305,17 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   }, []);
 
   // Calculate totals for DISPLAY ONLY
-  // We use the invoiceData props directly to ensure what we see is what is in the parent state
-  const calculateDisplayTotals = () => {
-    const subTotal = invoiceData.subTotal;
-    const discountAmount = invoiceData.discount;
-    // Recalculate tax just for display sanity check or use from state if you store it
-    const tax = subTotal * 0.18; 
-    const totalAmount = invoiceData.totalAmount;
+  // We use the derived values for the summary section, preventing the need to sync state
+  const calculateTotals = () => {
+    // We trust the props passed down from the parent
+    const subTotal = quotationData.subTotal;
+    const discountAmount = quotationData.discount;
+    const totalAmount = quotationData.totalAmount;
     
-    return { subTotal, tax, discountAmount, totalAmount };
+    return { subTotal, discountAmount, totalAmount };
   };
 
-  const { subTotal, tax, discountAmount, totalAmount } = calculateDisplayTotals();
+  const { subTotal, discountAmount, totalAmount } = calculateTotals();
 
   const handleDiscountPercentageChange = (value: string) => {
     const percentage = parseFloat(value) || 0;
@@ -384,13 +383,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         year_of_manufacture: newCustomer.year_of_manufacture
       };
 
-      const createdCustomer = await invoiceService.createCustomer(customerData);
+      const createdCustomer = await quotationService.createCustomer(customerData);
       setSelectedCustomer(createdCustomer);
       onCustomerIdChange(createdCustomer._id, createdCustomer);
       setCreatingCustomer(false);
       
       // Refresh customer list
-      const customers = await invoiceService.getAllCustomers();
+      const customers = await quotationService.getAllCustomers();
       setAllCustomers(customers);
       setCustomerSearchTerm(`${createdCustomer.fullName} (${createdCustomer.phone})`);
       
@@ -422,13 +421,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         year_of_manufacture: newCustomer.year_of_manufacture
       };
 
-      const updatedCustomer = await invoiceService.updateCustomer(selectedCustomer._id, customerData);
+      const updatedCustomer = await quotationService.updateCustomer(selectedCustomer._id, customerData);
       setSelectedCustomer(updatedCustomer);
       onCustomerIdChange(updatedCustomer._id, updatedCustomer);
       setEditingCustomer(false);
       
       // Refresh customer list
-      const customers = await invoiceService.getAllCustomers();
+      const customers = await quotationService.getAllCustomers();
       setAllCustomers(customers);
       setCustomerSearchTerm(`${updatedCustomer.fullName} (${updatedCustomer.phone})`);
       
@@ -452,7 +451,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   return (
     <div className="space-y-6">
       <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
-        <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Invoice</h2>
+        <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Quotation</h2>
         
         {/* Customer Search/Create */}
         <div className="space-y-4 mb-6">
@@ -835,7 +834,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           )}
         </div>
 
-        {/* Invoice Details */}
+        {/* Quotation Details */}
         <div className="space-y-4">
           {/* Dates */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -845,7 +844,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               </label>
               <input
                 type="date"
-                value={invoiceData.issueDate}
+                value={quotationData.issueDate}
                 onChange={(e) => onFieldChange('issueDate', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
@@ -853,12 +852,12 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Due Date*
+                Valid Until*
               </label>
               <input
                 type="date"
-                value={invoiceData.dueDate}
-                onChange={(e) => onFieldChange('dueDate', e.target.value)}
+                value={quotationData.validUntil}
+                onChange={(e) => onFieldChange('validUntil', e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
@@ -866,66 +865,37 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           </div>
 
           {/* Payment Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Payment Method*
-              </label>
-              <select
-                value={invoiceData.paymentMethod}
-                onChange={(e) => onFieldChange('paymentMethod', e.target.value)}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                {Object.values(PaymentMethod).map(method => (
-                  <option key={method} value={method}>{method}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Payment Status*
-              </label>
-              <select
-                value={invoiceData.paymentStatus}
-                onChange={(e) => onFieldChange('paymentStatus', e.target.value)}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                {Object.values(PaymentStatus).map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {invoiceData.paymentMethod === PaymentMethod.BANK_DEPOSIT && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Bank Deposit Date
-              </label>
-              <input
-                type="date"
-                value={invoiceData.bankDepositDate || ''}
-                onChange={(e) => onFieldChange('bankDepositDate', e.target.value)}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          )}
-
-          {/* Vehicle Number */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Vehicle Number*
+              Payment Method*
             </label>
-            <input
-              type="text"
-              value={invoiceData.vehicleNumber || ''}
-              onChange={(e) => onFieldChange('vehicleNumber', e.target.value)}
-              placeholder="Vehicle Number"
+            <select
+              value={quotationData.paymentMethod}
+              onChange={(e) => onFieldChange('paymentMethod', e.target.value)}
               className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
-            />
+            >
+              {Object.values(PaymentMethod).map(method => (
+                <option key={method} value={method}>{method}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Status*
+            </label>
+            <select
+              value={quotationData.status}
+              onChange={(e) => onFieldChange('status', e.target.value)}
+              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              {Object.values(QuotationStatus).map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
           </div>
 
           {/* Discount Percentage */}
@@ -939,7 +909,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 min="0"
                 max="100"
                 step="0.01"
-                value={invoiceData.discountPercentage}
+                value={quotationData.discountPercentage}
                 onChange={(e) => handleDiscountPercentageChange(e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
               />
@@ -958,7 +928,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               Notes
             </label>
             <textarea
-              value={invoiceData.notes || ''}
+              value={quotationData.notes || ''}
               onChange={(e) => onFieldChange('notes', e.target.value)}
               placeholder="Additional notes..."
               rows={3}
@@ -1010,7 +980,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                     </div>
                   ) : (
                     filteredItems.map((item) => {
-                      const existingItem = invoiceData.items.find(invItem => invItem.item === item.id);
+                      const existingItem = quotationData.items.find(invItem => invItem.item === item.id);
                       const existingQuantity = existingItem ? existingItem.quantity : 0;
                       const available = (item.quantity || 0) - existingQuantity;
                       
@@ -1146,24 +1116,24 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
-            {invoiceData.items.some(item => item.item === newItem.item) ? 'Update Item Quantity' : 'Add Item to Invoice'}
+            {quotationData.items.some(item => item.item === newItem.item) ? 'Update Item Quantity' : 'Add Item to Quotation'}
           </button>
         </div>
       </div>
 
       {/* Items List */}
-      {invoiceData.items.length > 0 && (
+      {quotationData.items.length > 0 && (
         <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-200">Items List ({invoiceData.items.length} items)</h3>
+            <h3 className="text-lg font-semibold text-gray-200">Items List ({quotationData.items.length} items)</h3>
             <div className="text-sm text-gray-400">
               Subtotal: <span className="text-green-400 font-semibold">LKR {subTotal.toFixed(2)}</span>
             </div>
           </div>
           <div className="space-y-3">
-            {invoiceData.items.map((item) => {
+            {quotationData.items.map((item) => {
               const inventoryItem = inventoryItems.find(inv => inv.id === item.item);
-              const existingQuantity = invoiceData.items
+              const existingQuantity = quotationData.items
                 .filter(invItem => invItem.item === item.item)
                 .reduce((sum, invItem) => sum + invItem.quantity, 0);
               
@@ -1227,11 +1197,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               <span className="text-white font-medium">LKR {subTotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-300">Tax (18%):</span>
-              <span className="text-yellow-400 font-medium">LKR {tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-300">Discount ({invoiceData.discountPercentage}%):</span>
+              <span className="text-gray-300">Discount ({quotationData.discountPercentage}%):</span>
               <span className="text-red-400 font-medium">- LKR {discountAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-lg font-semibold pt-2 border-t border-[#334155]">
@@ -1245,4 +1211,4 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   );
 };
 
-export default InvoiceForm;
+export default QuotationForm;

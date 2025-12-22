@@ -23,8 +23,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
     { name: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
     { name: "Inventory", icon: Package, path: "/inventory" },
     { name: "Quotations", icon: ClipboardList, path: "/quotations" },
-    { name: "Finance", icon: DollarSign, path: "/finance" },
     { name: "Invoice", icon: FileText, path: "/invoice" },
+    { name: "Finance", icon: DollarSign, path: "/finance" },
   ];
 
   const handleNavigation = (path: string) => {

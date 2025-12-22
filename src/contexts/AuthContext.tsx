@@ -34,31 +34,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const initAuth = async () => {
-    if (!user) {
+    setIsLoading(true);
+
+    try {
+      const res = await api.get("/auth/me"); // 🔑 VERIFY COOKIE
+      const me = res.data.user;
+
+      setUser(me);
+      setRole(me.role);
+      localStorage.setItem("user", JSON.stringify(me));
+      localStorage.setItem("role", me.role);
+    } catch {
+      setUser(null);
+      setRole(null);
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+    } finally {
       setIsLoading(false);
-      return;
     }
-    await checkAuth();
   };
 
   const checkAuth = async (): Promise<boolean> => {
-    if (!user) return false;
-
     try {
-      setIsLoading(false);
+      const res = await api.get("/auth/me");
+      const me = res.data.user;
+
+      setUser(me);
+      setRole(me.role);
+      localStorage.setItem("user", JSON.stringify(me));
+      localStorage.setItem("role", me.role);
+
       return true;
-    } catch (error: any) {
-      console.error("Auth check failed:", error);
-
-      if (error.response?.status === 401) {
-        localStorage.removeItem("user");
-        localStorage.removeItem("role");
-        setUser(null);
-        setRole(null);
-      }
-
-      setIsLoading(false);
+    } catch (error) {
+      setUser(null);
+      setRole(null);
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -66,10 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const res = await api.post("/auth/login", data);
-      const { user: loggedUser } = res.data;
+      const loggedUser = res.data.user;
 
       setUser(loggedUser);
       setRole(loggedUser.role);
+
       localStorage.setItem("user", JSON.stringify(loggedUser));
       localStorage.setItem("role", loggedUser.role);
     } finally {
