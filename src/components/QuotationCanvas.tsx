@@ -45,7 +45,6 @@ const QuotationCanvas: React.FC<QuotationCanvasProps> = ({ quotationData }) => {
       const img = templateRef.current;
       if (!img.complete) {
         img.onload = () => {
-          console.log('Quotation template loaded for PDF generation');
         };
       }
     }
@@ -118,7 +117,6 @@ const QuotationCanvas: React.FC<QuotationCanvasProps> = ({ quotationData }) => {
           zIndex: 1,
           pointerEvents: 'none' 
         }}
-        onLoad={() => console.log('Template image loaded')}
         onError={(e) => {
           console.error('Failed to load template image:', e);
           (e.target as HTMLImageElement).style.display = 'none';
