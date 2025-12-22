@@ -199,7 +199,7 @@ const QuotationCanvas: React.FC<QuotationCanvasProps> = ({ quotationData }) => {
         <div 
           style={{
             position: 'absolute',
-            top: '85mm',
+            top: '82mm',
             left: '15mm',
             right: '15mm',
             height: '1px',
@@ -428,7 +428,7 @@ const QuotationCanvas: React.FC<QuotationCanvasProps> = ({ quotationData }) => {
         <div 
           style={{
             position: 'absolute',
-            top: '201mm',
+            top: '203mm',
             left: '15mm',
             right: '15mm',
             height: '1px',
