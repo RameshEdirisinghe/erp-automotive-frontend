@@ -46,7 +46,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
       const img = templateRef.current;
       if (!img.complete) {
         img.onload = () => {
-          console.log('Invoice template loaded for PDF generation');
         };
       }
     }
@@ -120,7 +119,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           zIndex: 1,
           pointerEvents: 'none' 
         }}
-        onLoad={() => console.log('Template image loaded')}
         onError={(e) => {
           console.error('Failed to load template image:', e);
           (e.target as HTMLImageElement).style.display = 'none';
