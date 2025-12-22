@@ -21,13 +21,18 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
     }
   };
 
-  // Calculate tax 
-  const calculateTax = () => {
-    return invoiceData.subTotal * 0.18;
+  // Calculate tax and discount
+  const calculateTotals = () => {
+    const subTotal = invoiceData.subTotal;
+    const discountPercentage = invoiceData.discountPercentage || 0;
+    const discountAmount = subTotal * (discountPercentage / 100);
+    const taxAmount = subTotal * 0.18;
+    const totalAmount = subTotal + taxAmount - discountAmount;
+    
+    return { subTotal, discountPercentage, discountAmount, taxAmount, totalAmount };
   };
 
-  const taxAmount = calculateTax();
-  const totalAmount = invoiceData.subTotal + taxAmount - invoiceData.discount;
+  const { subTotal, discountPercentage, discountAmount, taxAmount, totalAmount } = calculateTotals();
 
   const getRowColor = (index: number) => {
     return index % 2 === 0 ? '#f5f5f5' : '#ffffff';
@@ -50,32 +55,49 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   const renderCustomerDetails = () => {
     const details = [];
     
-    // Issue date 
-    details.push(<div key="date">{formatDate(invoiceData.issueDate)}</div>);
-    
-    // Add address only if it exists
-    if (invoiceData.customer.address && invoiceData.customer.address.trim()) {
-      details.push(<div key="address">{invoiceData.customer.address}</div>);
+    if (!invoiceData.customerDetails) {
+      details.push(<div key="no-customer">Customer information not available</div>);
+      return details;
     }
     
+    
+    // Add address if it exists
+    if (invoiceData.customerDetails.address) {
+      const addressParts = [];
+      if (invoiceData.customerDetails.address.street) {
+        addressParts.push(invoiceData.customerDetails.address.street);
+      }
+      if (invoiceData.customerDetails.address.city) {
+        addressParts.push(invoiceData.customerDetails.address.city);
+      }
+      if (invoiceData.customerDetails.address.country) {
+        addressParts.push(invoiceData.customerDetails.address.country);
+      }
+      if (invoiceData.customerDetails.address.zip) {
+        addressParts.push(invoiceData.customerDetails.address.zip);
+      }
+      
+      if (addressParts.length > 0) {
+        details.push(<div key="address">{addressParts.join(', ')}</div>);
+      }
+    }
+    
+    // Add date 
+    details.push(<div key="date">{formatDate(invoiceData.issueDate)}</div>);
+    
     // Add email only if it exists
-    if (invoiceData.customer.email && invoiceData.customer.email.trim()) {
-      details.push(<div key="email">{invoiceData.customer.email}</div>);
+    if (invoiceData.customerDetails.email) {
+      details.push(<div key="email">{invoiceData.customerDetails.email}</div>);
     }
     
     // Add phone only if it exists
-    if (invoiceData.customer.phone && invoiceData.customer.phone.trim()) {
-      details.push(<div key="phone">{invoiceData.customer.phone}</div>);
+    if (invoiceData.customerDetails.phone) {
+      details.push(<div key="phone">{invoiceData.customerDetails.phone}</div>);
     }
     
     // Add VAT number only if it exists
-    if (invoiceData.customer.vat_number && invoiceData.customer.vat_number.trim()) {
-      details.push(
-        <div key="vat" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
-          <span style={{ fontWeight: '500' }}>VAT Number:</span>
-          <span>{invoiceData.customer.vat_number}</span>
-        </div>
-      );
+    if (invoiceData.customerDetails.vatNumber) {
+      details.push(<div key="vat">VAT: {invoiceData.customerDetails.vatNumber}</div>);
     }
     
     return details;
@@ -119,7 +141,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           fontFamily: 'Arial, sans-serif'
         }}
       >
- 
         {/* Customer Name */}
         <div 
           style={{
@@ -131,7 +152,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
             color: '#000000'
           }}
         >
-          {invoiceData.customer.name || ""}
+          {invoiceData.customerDetails?.fullName || "Customer Name"}
         </div>
 
         {/* Customer Details */}
@@ -189,64 +210,64 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           }}
         />
 
-       {/* Table Header */}
-<div 
-  style={{
-    position: 'absolute',
-    top: '88mm',
-    left: '15mm',
-    right: '15mm',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    color: '#ffffff',
-    display: 'grid',
-    gridTemplateColumns: '60% 13% 13% 14%',
-    backgroundColor: '#2e2d2dff',
-    padding: '2mm 0',
-    alignItems: 'center',
-    height: '8mm',
-    minHeight: '8mm',
-    maxHeight: '8mm',
-    boxSizing: 'border-box'
-  }}
->
-  <div style={{ 
-    paddingLeft: '2mm',
-    display: 'flex', 
-    alignItems: 'center',
-    justifyContent: 'flex-start', 
-    height: '100%'
-  }}>
-    DESCRIPTION
-  </div>
-  <div style={{ 
-    textAlign: 'center', 
-    display: 'flex', 
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  }}>
-    PRICE
-  </div>
-  <div style={{ 
-    textAlign: 'center', 
-    display: 'flex', 
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  }}>
-    QTY
-  </div>
-  <div style={{ 
-    textAlign: 'center', 
-    display: 'flex', 
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  }}>
-    TOTAL
-  </div>
-</div>
+        {/* Table Header */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '88mm',
+            left: '15mm',
+            right: '15mm',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: '#ffffff',
+            display: 'grid',
+            gridTemplateColumns: '60% 13% 13% 14%',
+            backgroundColor: '#2e2d2dff',
+            padding: '2mm 0',
+            alignItems: 'center',
+            height: '8mm',
+            minHeight: '8mm',
+            maxHeight: '8mm',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ 
+            paddingLeft: '2mm',
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'flex-start', 
+            height: '100%'
+          }}>
+            DESCRIPTION
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            PRICE
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            QTY
+          </div>
+          <div style={{ 
+            textAlign: 'center', 
+            display: 'flex', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}>
+            TOTAL
+          </div>
+        </div>
 
         {/* Items List */}
         <div 
@@ -384,24 +405,26 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           {/* Left Column - Payment Data */}
           <div>
             <div style={{ fontWeight: 'bold', marginBottom: '1mm', fontSize: '12px' }}>PAYMENT DATA:</div>
-            <div style={{ marginBottom: '1mm' }}>ACCOUNT#: {invoiceData.bankAccount || "12356587965497"}</div>
-            <div style={{ marginBottom: '1mm' }}>NAME: {invoiceData.accountName || "YOUR NAME"}</div>
-            <div style={{ marginBottom: '1mm' }}>PAYMENT METHOD: {invoiceData.paymentMethod || "DEBIT CARD"}</div>
+            <div style={{ marginBottom: '1mm' }}>PAYMENT METHOD: {invoiceData.paymentMethod || "CASH"}</div>
+            <div style={{ marginBottom: '1mm' }}>STATUS: {invoiceData.paymentStatus || "PENDING"}</div>
+            {invoiceData.bankDepositDate && (
+              <div style={{ marginBottom: '1mm' }}>DEPOSIT DATE: {formatDate(invoiceData.bankDepositDate)}</div>
+            )}
           </div>
           
           {/* Right Column - Totals */}
           <div style={{ marginTop: '-10mm' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
               <span style={{ fontWeight: 'bold' }}>SUBTOTAL:</span>
-              <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {invoiceData.subTotal.toFixed(2)}</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {subTotal.toFixed(2)}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
               <span style={{ fontWeight: 'bold' }}>TAX (18%):</span>
               <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {taxAmount.toFixed(2)}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
-              <span style={{ fontWeight: 'bold' }}>DISCOUNT:</span>
-              <span style={{ textAlign: 'right', minWidth: '50px' }}>- LKR {invoiceData.discount.toFixed(2)}</span>
+              <span style={{ fontWeight: 'bold' }}>DISCOUNT ({discountPercentage}%):</span>
+              <span style={{ textAlign: 'right', minWidth: '50px' }}>- LKR {discountAmount.toFixed(2)}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', fontWeight: 'bold', fontSize: '14px', marginTop: '3mm' }}>
               <span>TOTAL:</span>
@@ -460,15 +483,15 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Vehicle Number:</span>
-              <span>{invoiceData.customer.vehicle_number || "N/A"}</span>
+              <span>{invoiceData.vehicleNumber || "N/A"}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Vehicle Model:</span>
-              <span>{invoiceData.customer.vehicle_model || "N/A"}</span>
+              <span>{invoiceData.customerDetails?.vehicle_model || "N/A"}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Year of Manufacture:</span>
-              <span>{invoiceData.customer.year_of_manufacture || "N/A"}</span>
+              <span>{invoiceData.customerDetails?.year_of_manufacture || "N/A"}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Issue Date:</span>
@@ -481,7 +504,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
           </div>
         </div>
 
-        {/* Date */}
+        {/* Date at bottom */}
         <div 
           style={{
             position: 'absolute',
@@ -495,7 +518,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
         >
           {formatDate(invoiceData.issueDate)}
         </div>
-        
       </div>
     </div>
   );

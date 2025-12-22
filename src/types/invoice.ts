@@ -16,11 +16,18 @@ export type PaymentMethodType = typeof PaymentMethod[keyof typeof PaymentMethod]
 export type PaymentStatusType = typeof PaymentStatus[keyof typeof PaymentStatus];
 
 export interface InvoiceCustomer {
-  name: string;
+  _id: string;
+  fullName: string;
   email: string;
   phone: string;
-  address?: string;
-  vat_number?: string;
+  vatNumber: string;
+  address?: {
+    street?: string;
+    city?: string;
+    country?: string;
+    zip?: string;
+  };
+  customerCode: string;
   vehicle_number?: string;
   vehicle_model?: string;
   year_of_manufacture?: number;
@@ -45,9 +52,35 @@ export interface InvoiceItemBackend {
 }
 
 export interface InvoiceData {
+  _id?: string;
   invoiceId: string;
-  customer: InvoiceCustomer;
+  customer: string;
+  customerDetails?: InvoiceCustomer;
   items: InvoiceItem[];
+  subTotal: number;
+  discount: number;
+  discountPercentage: number;
+  totalAmount: number;
+  paymentStatus: PaymentStatusType;
+  paymentMethod: PaymentMethodType;
+  bankDepositDate?: string;
+  issueDate: string;
+  dueDate: string;
+  vehicleNumber: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BackendInvoiceData {
+  invoiceId?: string;
+  customer: string;
+  items: Array<{
+    item: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
   subTotal: number;
   discount: number;
   totalAmount: number;
@@ -56,11 +89,8 @@ export interface InvoiceData {
   bankDepositDate?: string;
   issueDate: string;
   dueDate: string;
+  vehicleNumber: string;
   notes?: string;
-  created_at?: string;
-  updated_at?: string;
-  bankAccount?: string;
-  accountName?: string;
 }
 
 export interface InvoiceResponse {
@@ -82,6 +112,7 @@ export interface InvoiceResponse {
   bankDepositDate?: string;
   issueDate: string;
   dueDate: string;
+  vehicleNumber: string;
   notes?: string;
   created_at?: string;
   updated_at?: string;
