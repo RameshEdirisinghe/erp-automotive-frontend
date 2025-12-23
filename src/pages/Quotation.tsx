@@ -90,17 +90,14 @@ const Quotation: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, [isMobileView]);
 
-  // Load inventory items and generate next quotation ID
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
         
-        // Load inventory items
         const items = await inventoryService.getAll();
         setInventoryItems(items as QuotationInventoryItem[]);
         
-        // Get next quotation ID from backend
         const nextId = await quotationService.getNextId();
         setQuotationData(prev => ({ ...prev, quotationId: nextId }));
         
@@ -121,7 +118,6 @@ const Quotation: React.FC = () => {
   const handleAddItem = (item: Omit<QuotationItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
     
-    // Check if item already exists
     const existingItemIndex = quotationData.items.findIndex(
       existing => existing.item === item.item
     );
@@ -129,7 +125,6 @@ const Quotation: React.FC = () => {
     let newItems;
     
     if (existingItemIndex !== -1) {
-      // Update existing item
       newItems = [...quotationData.items];
       const existingItem = newItems[existingItemIndex];
       const updatedItem = {
