@@ -3,8 +3,8 @@ import Sidebar from "../components/Sidebar";
 import { User, FileText, Download, Printer, Menu, X } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
-import type { 
-  InvoiceData, 
+import type {
+  InvoiceData,
   InvoiceItem,
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
@@ -21,9 +21,6 @@ const TAX_RATE = 0.18;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const PX_PER_MM = 3.78;
-const CANVAS_WIDTH = Math.round(A4_WIDTH_MM * PX_PER_MM);
-const CANVAS_HEIGHT = Math.round(A4_HEIGHT_MM * PX_PER_MM);
-const IMAGE_STABILIZE_DELAY_MS = 300;
 
 const calculateInvoiceTotals = (items: InvoiceItem[], discountPercentage: number) => {
   const subTotal = items.reduce((sum, current) => sum + current.total, 0);
@@ -36,24 +33,6 @@ const calculateInvoiceTotals = (items: InvoiceItem[], discountPercentage: number
     discount,
     totalAmount,
   };
-};
-
-const wait = (duration: number) => new Promise<void>(resolve => setTimeout(resolve, duration));
-
-const ensureImagesReady = async (container: HTMLElement) => {
-  const images = container.getElementsByTagName('img');
-  const imagePromises = Array.from(images).map(img => {
-    if (img.complete) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>(resolve => {
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-    });
-  });
-
-  await Promise.all(imagePromises);
 };
 
 const Invoice: React.FC = () => {
@@ -89,7 +68,7 @@ const Invoice: React.FC = () => {
   useEffect(() => {
     const checkScreenSize = () => {
       const width = window.innerWidth;
-      setIsMobileView(width < 1024); 
+      setIsMobileView(width < 1024);
       if (width < 1024) {
         setActivePanel('form');
       }
@@ -97,62 +76,62 @@ const Invoice: React.FC = () => {
 
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
-    
+
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   useEffect(() => {
-  const calculateInitialScale = () => {
-    if (!rightPanelRef.current || isMobileView) return;
+    const calculateInitialScale = () => {
+      if (!rightPanelRef.current || isMobileView) return;
 
-    const panelWidth = rightPanelRef.current.clientWidth;
-    const panelHeight = rightPanelRef.current.clientHeight;
+      const panelWidth = rightPanelRef.current.clientWidth;
+      const panelHeight = rightPanelRef.current.clientHeight;
 
-    const a4Width = A4_WIDTH_MM * PX_PER_MM;
-    const a4Height = A4_HEIGHT_MM * PX_PER_MM;
+      const a4Width = A4_WIDTH_MM * PX_PER_MM;
+      const a4Height = A4_HEIGHT_MM * PX_PER_MM;
 
-    const availableWidth = panelWidth - 48;
-    const availableHeight = panelHeight - 120;
+      const availableWidth = panelWidth - 48;
+      const availableHeight = panelHeight - 120;
 
-    const widthScale = availableWidth / a4Width;
-    const heightScale = availableHeight / a4Height;
+      const widthScale = availableWidth / a4Width;
+      const heightScale = availableHeight / a4Height;
 
-    const newScale = Math.max(
-      Math.min(widthScale, heightScale),
-      0.3
-    );
+      const newScale = Math.max(
+        Math.min(widthScale, heightScale),
+        0.3
+      );
 
-    setScale(prev => {
-      if (Math.abs(prev - newScale) < 0.01) {
-        return prev;
-      }
-      return newScale;
-    });
-  };
+      setScale(prev => {
+        if (Math.abs(prev - newScale) < 0.01) {
+          return prev;
+        }
+        return newScale;
+      });
+    };
 
-  calculateInitialScale();
+    calculateInitialScale();
 
-  const resizeObserver = new ResizeObserver(calculateInitialScale);
+    const resizeObserver = new ResizeObserver(calculateInitialScale);
 
-  if (rightPanelRef.current) {
-    resizeObserver.observe(rightPanelRef.current);
-  }
+    if (rightPanelRef.current) {
+      resizeObserver.observe(rightPanelRef.current);
+    }
 
-  return () => resizeObserver.disconnect();
-}, [isMobileView]);
+    return () => resizeObserver.disconnect();
+  }, [isMobileView]);
 
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        
+
         const items = await inventoryService.getAll();
         setInventoryItems(items as InvoiceInventoryItem[]);
-        
+
         const nextId = await invoiceService.getNextId();
         setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
-        
+
       } catch (error) {
         console.error('Error loading data:', error);
         setAlert({
@@ -293,12 +272,12 @@ const Invoice: React.FC = () => {
       });
 
       const invoiceContainer = invoiceRef.current;
-      
+
       const originalTransform = invoiceContainer.style.transform;
       const originalTransformOrigin = invoiceContainer.style.transformOrigin;
       const originalWidth = invoiceContainer.style.width;
       const originalHeight = invoiceContainer.style.height;
-      
+
       invoiceContainer.style.transform = 'none';
       invoiceContainer.style.transformOrigin = 'top left';
       invoiceContainer.style.width = '210mm';
@@ -307,7 +286,7 @@ const Invoice: React.FC = () => {
       invoiceContainer.style.left = '0';
       invoiceContainer.style.top = '0';
       invoiceContainer.style.zIndex = '9999';
-      
+
       void invoiceContainer.offsetHeight;
 
       const images = invoiceContainer.getElementsByTagName('img');
@@ -320,7 +299,7 @@ const Invoice: React.FC = () => {
       });
 
       await Promise.all(imageLoadPromises);
-      
+
       await new Promise(resolve => setTimeout(resolve, 300));
 
       const canvas = await html2canvas(invoiceContainer, {
@@ -352,7 +331,7 @@ const Invoice: React.FC = () => {
       invoiceContainer.style.zIndex = '';
 
       const jpegData = canvas.toDataURL('image/jpeg', 1.0);
-      
+
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -361,17 +340,17 @@ const Invoice: React.FC = () => {
 
       const pdfWidth = 210;
       const pdfHeight = 297;
-      
+
       const imgWidth = pdfWidth;
       const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-      
+
       const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
-      
+
       const xPos = 0;
       const yPos = 0;
 
       pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
-      
+
       pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
 
       setAlert({
@@ -510,11 +489,11 @@ const Invoice: React.FC = () => {
       printWindow.document.open();
       printWindow.document.write(printHtml);
       printWindow.document.close();
-      
+
       printWindow.focus();
 
       setIsGeneratingPDF(false);
-      
+
     } catch (error) {
       console.error('Error preparing print:', error);
       setAlert({
@@ -581,8 +560,8 @@ const Invoice: React.FC = () => {
         )}
 
         <div className="flex-1 flex overflow-hidden">
-          <div className={`${isMobileView 
-            ? (activePanel === 'form' ? 'w-full' : 'hidden') 
+          <div className={`${isMobileView
+            ? (activePanel === 'form' ? 'w-full' : 'hidden')
             : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
           >
             {isLoading ? (
@@ -604,10 +583,10 @@ const Invoice: React.FC = () => {
             )}
           </div>
 
-          <div 
+          <div
             ref={rightPanelRef}
-            className={`${isMobileView 
-              ? (activePanel === 'preview' ? 'w-full' : 'hidden') 
+            className={`${isMobileView
+              ? (activePanel === 'preview' ? 'w-full' : 'hidden')
               : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
           >
             <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
@@ -640,7 +619,7 @@ const Invoice: React.FC = () => {
               </div>
             </div>
 
-            <div 
+            <div
               ref={containerRef}
               className="flex-1 overflow-hidden bg-white flex items-center justify-center p-2 md:p-4"
             >
@@ -653,7 +632,7 @@ const Invoice: React.FC = () => {
                   width: '210mm',
                   minHeight: '297mm',
                   transition: 'transform 0.15s ease-out',
-                  boxShadow: isMobileView 
+                  boxShadow: isMobileView
                     ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
                     : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                   backgroundColor: 'white'
