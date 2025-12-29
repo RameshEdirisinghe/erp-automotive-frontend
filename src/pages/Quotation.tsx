@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Menu, X } from "lucide-react";
+import { User, FileText, Download, Printer, Menu, X, Save } from "lucide-react";
 import QuotationForm from "../components/QuotationForm";
 import QuotationCanvas from "../components/QuotationCanvas";
 import type { 
@@ -24,6 +24,7 @@ const Quotation: React.FC = () => {
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<QuotationInventoryItem[]>([]);
   const quotationRef = useRef<HTMLDivElement>(null);
@@ -222,6 +223,60 @@ const Quotation: React.FC = () => {
     }));
   };
 
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setAlert({
+        type: 'info',
+        message: 'Saving quotation...'
+      });
+
+      // Prepare data for backend
+      const backendData = {
+        quotationId: quotationData.quotationId,
+        customer: quotationData.customer,
+        items: quotationData.items.map(item => ({
+          item: item.item,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        })),
+        subTotal: quotationData.subTotal,
+        discount: quotationData.discount,
+        totalAmount: quotationData.totalAmount,
+        paymentMethod: quotationData.paymentMethod,
+        issueDate: quotationData.issueDate,
+        validUntil: quotationData.validUntil,
+        status: quotationData.status,
+        notes: quotationData.notes
+      };
+
+      const response = await quotationService.create(backendData);
+      
+      // Update quotationData with the returned _id
+      setQuotationData(prev => ({
+        ...prev,
+        _id: response._id
+      }));
+
+      setAlert({
+        type: 'success',
+        message: 'Quotation saved successfully!'
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error saving quotation:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save quotation'
+      });
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const downloadPDF = async () => {
     if (!quotationRef.current) {
       setAlert({
@@ -229,6 +284,23 @@ const Quotation: React.FC = () => {
         message: "Quotation content not available for PDF generation."
       });
       return;
+    }
+
+    // Check if quotation is saved
+    if (!quotationData._id) {
+      const shouldSave = window.confirm(
+        "This quotation has not been saved yet. Do you want to save it now and then download?"
+      );
+      
+      if (shouldSave) {
+        const saved = await handleSave();
+        if (!saved) {
+          return; // Abort if save failed
+        }
+      } else if (shouldSave === null) {
+        return; // User cancelled
+      }
+      // If shouldSave is false, proceed without saving
     }
 
     try {
@@ -341,6 +413,23 @@ const Quotation: React.FC = () => {
 
   const handlePrint = async () => {
     if (!quotationRef.current) return;
+
+    // Check if quotation is saved
+    if (!quotationData._id) {
+      const shouldSave = window.confirm(
+        "This quotation has not been saved yet. Do you want to save it now and then print?"
+      );
+      
+      if (shouldSave) {
+        const saved = await handleSave();
+        if (!saved) {
+          return; // Abort if save failed
+        }
+      } else if (shouldSave === null) {
+        return; // User cancelled
+      }
+      // If shouldSave is false, proceed without saving
+    }
 
     try {
       setIsGeneratingPDF(true);
@@ -575,8 +664,22 @@ const Quotation: React.FC = () => {
                 <h2 className="text-base md:text-lg font-semibold text-gray-800">Quotation Preview</h2>
                 <div className="flex items-center justify-end sm:justify-start gap-2">
                   <button
+                    onClick={handleSave}
+                    disabled={isLoading || isGeneratingPDF || isSaving}
+                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">Save</span>
+                      </>
+                    )}
+                  </button>
+                  <button
                     onClick={downloadPDF}
-                    disabled={isLoading || isGeneratingPDF}
+                    disabled={isLoading || isGeneratingPDF || isSaving}
                     className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isGeneratingPDF ? (
@@ -590,7 +693,7 @@ const Quotation: React.FC = () => {
                   </button>
                   <button
                     onClick={handlePrint}
-                    disabled={isLoading || isGeneratingPDF}
+                    disabled={isLoading || isGeneratingPDF || isSaving}
                     className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Printer className="w-3 h-3 md:w-4 md:h-4" />
