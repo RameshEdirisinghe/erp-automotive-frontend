@@ -5,7 +5,8 @@ import QuotationForm from "../components/QuotationForm";
 import QuotationCanvas from "../components/QuotationCanvas";
 import type { 
   QuotationData, 
-  QuotationItem
+  QuotationItem,
+  BackendQuotationData
 } from "../types/quotation";
 import type { InventoryItem as QuotationInventoryItem } from "../types/inventory";
 import { PaymentMethod } from "../types/invoice";
@@ -157,6 +158,27 @@ const Quotation: React.FC = () => {
     }));
   };
 
+  const prepareQuotationForSave = (data: QuotationData): BackendQuotationData => {
+  return {
+    quotationId: data.quotationId,
+    customer: data.customer,
+    items: data.items.map(item => ({
+      item: item.item,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    })),
+    subTotal: data.subTotal,
+    discount: data.discount,
+    totalAmount: data.totalAmount,
+    paymentMethod: data.paymentMethod,
+    issueDate: data.issueDate,
+    validUntil: data.validUntil,
+    status: data.status,
+    notes: data.notes,
+  };
+};
+
   const handleRemoveItem = (id: string) => {
     const newItems = quotationData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
@@ -224,33 +246,31 @@ const Quotation: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Prevent saving if already saved or missing required data
+    if (quotationData._id) {
+      setAlert({
+        type: 'info',
+        message: 'Quotation already saved!'
+      });
+      return true;
+    }
+
+    if (!quotationData.customer || quotationData.items.length === 0) {
+      setAlert({
+        type: 'error',
+        message: 'Please add customer and at least one item before saving'
+      });
+      return false;
+    }
+
     try {
       setIsSaving(true);
       setAlert({
         type: 'info',
         message: 'Saving quotation...'
       });
-
-      // Prepare data for backend
-      const backendData = {
-        quotationId: quotationData.quotationId,
-        customer: quotationData.customer,
-        items: quotationData.items.map(item => ({
-          item: item.item,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total
-        })),
-        subTotal: quotationData.subTotal,
-        discount: quotationData.discount,
-        totalAmount: quotationData.totalAmount,
-        paymentMethod: quotationData.paymentMethod,
-        issueDate: quotationData.issueDate,
-        validUntil: quotationData.validUntil,
-        status: quotationData.status,
-        notes: quotationData.notes
-      };
-
+      
+      const backendData = prepareQuotationForSave(quotationData);
       const response = await quotationService.create(backendData);
       
       // Update quotationData with the returned _id
@@ -602,6 +622,9 @@ const Quotation: React.FC = () => {
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
               Quotation ID: <span className="font-semibold">{quotationData.quotationId || 'Loading...'}</span>
+              {!quotationData._id && quotationData.quotationId && (
+                <span className="ml-2 text-red-400 font-semibold">(Unsaved)</span>
+              )}
             </div>
             <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
