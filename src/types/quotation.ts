@@ -28,11 +28,11 @@ export interface QuotationCustomer {
 export interface QuotationItem {
   id: string;
   item: string;
+  itemName?: string;
+  description?: string;
   quantity: number;
   unitPrice: number;
   total: number;
-  itemName?: string;
-  description?: string;
 }
 
 export interface QuotationItemBackend {
@@ -40,7 +40,6 @@ export interface QuotationItemBackend {
   quantity: number;
   unitPrice: number;
   total: number;
-  _id?: string;
 }
 
 export interface QuotationData {
@@ -63,12 +62,7 @@ export interface QuotationData {
 export interface BackendQuotationData {
   quotationId?: string;
   customer: string;
-  items: Array<{
-    item: string;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-  }>;
+  items: QuotationItemBackend[];
   subTotal: number;
   discount: number;
   totalAmount: number;
@@ -83,13 +77,7 @@ export interface QuotationResponse {
   _id: string;
   quotationId: string;
   customer: QuotationCustomer;
-  items: Array<{
-    item: any;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-    _id?: string;
-  }>;
+  items: Array<QuotationItemBackend & { _id?: string }>;
   subTotal: number;
   discount: number;
   totalAmount: number;
