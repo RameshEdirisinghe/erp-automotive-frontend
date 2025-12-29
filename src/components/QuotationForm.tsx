@@ -82,16 +82,13 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     year_of_manufacture: undefined as number | undefined
   });
 
-  // --- FIXED: Removed the useEffect that was causing the infinite loop ---
-  // The parent component (Quotation.tsx) handles the math for subTotal/totalAmount
-  // when items are added/removed/updated. We do NOT need to sync it back here.
-
   useEffect(() => {
     setItemTotal(newItem.quantity * newItem.unitPrice);
     
     // Check stock availability
     if (newItem.item) {
-      const selectedItem = inventoryItems.find(item => item.id === newItem.item);
+      const selectedItem = inventoryItems.find(item => item._id === newItem.item);
+      
       if (selectedItem) {
         // Calculate total quantity including already added items
         const existingQuantity = quotationData.items
@@ -175,7 +172,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
 
   const handleItemSelect = (inventoryItem: InventoryItem) => {
     setNewItem({
-      item: inventoryItem.id,
+      item: inventoryItem._id,
       itemName: inventoryItem.product_name,
       quantity: 1,
       unitPrice: inventoryItem.sell_price,
@@ -229,11 +226,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
       return;
     }
 
-    // Check if item already exists in quotation
     const existingItem = quotationData.items.find(item => item.item === newItem.item);
     
     if (existingItem) {
-      // Update quantity of existing item
       const inventoryItem = inventoryItems.find(item => item.id === newItem.item);
       if (inventoryItem) {
         const newTotalQuantity = existingItem.quantity + newItem.quantity;
@@ -251,7 +246,6 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         });
       }
     } else {
-      // Check stock availability for new item
       const selectedItem = inventoryItems.find(item => item.id === newItem.item);
       if (selectedItem && newItem.quantity > selectedItem.quantity) {
         alert(`Cannot add ${newItem.quantity} items. Only ${selectedItem.quantity} in stock.`);
@@ -261,7 +255,6 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
       onAddItem(newItem);
     }
 
-    // Reset form
     setNewItem({
       item: "",
       quantity: 1,
