@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from "react";
-import type { QuotationData, QuotationItem } from "../types/quotation";
-import type { InventoryItem } from "../types/inventory"; 
-import { PaymentMethod } from "../types/invoice";
-import { QuotationStatus } from "../types/quotation";
-import { useCustomerSearch, type Customer } from "../hooks/useCustomerSearch";
-import { useItemSearch } from "../hooks/useItemSearch";
-import { CustomerSearchAndManagement } from "./quotation/CustomerSearchAndManagement";
-import { CustomerViewModal } from "./quotation/CustomerViewModal";
-import { CustomerFormModal } from "./quotation/CustomerFormModal";
-import { ItemSearchAndAdd } from "./quotation/ItemSearchAndAdd";
-import { QuotationItemsList } from "./quotation/QuotationItemsList";
-import { QuotationSummary } from "./quotation/QuotationSummary";
+import React, { useState, useMemo, useCallback } from "react";
+import type { QuotationData, QuotationItem } from "../../types/quotation";
+import type { InventoryItem } from "../../types/inventory";
+import { PaymentMethod } from "../../types/invoice";
+import { QuotationStatus } from "../../types/quotation";
+import { useCustomerSearch, type Customer } from "../../hooks/useCustomerSearch";
+import { useItemSearch } from "../../hooks/useItemSearch";
+import { CustomerSearchAndManagement } from "./CustomerSearchAndManagement";
+import { CustomerViewModal } from "./CustomerViewModal";
+import { CustomerFormModal } from "./CustomerFormModal";
+import { ItemSearchAndAdd } from "./ItemSearchAndAdd";
+import { QuotationItemsList } from "./QuotationItemsList";
+import { QuotationSummary } from "./QuotationSummary";
 
 interface QuotationFormProps {
   quotationData: QuotationData;
   onFieldChange: (field: keyof QuotationData, value: string | number | boolean | Date) => void;
-  onCustomerIdChange: (customerId: string, customerDetails?: Record<string, any>) => void;
+  onCustomerIdChange: (customerId: string, customerDetails?: unknown) => void;
   onAddItem: (item: Omit<QuotationItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<QuotationItem>) => void;
@@ -49,137 +49,105 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     setShowSuggestions: setShowItemSuggestions,
   } = useItemSearch(inventoryItems);
 
-  const [newItem, setNewItem] = useState<Omit<QuotationItem, 'id' | 'total'>>({
-    item: "",
-    quantity: 1,
-    unitPrice: 0,
-    itemName: "",
-  });
+  const [newItem, setNewItem] = useState<Omit<QuotationItem, 'id' | 'total'>>({ item: "", quantity: 1, unitPrice: 0, itemName: "" });
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerModalMode, setCustomerModalMode] = useState<'view' | 'create' | 'edit' | null>(null);
-  
-  const [itemTotal, setItemTotal] = useState(0);
-  const [stockWarning, setStockWarning] = useState<string | null>(null);
 
-  useEffect(() => {
-    setItemTotal(newItem.quantity * newItem.unitPrice);
-    
-    if (newItem.item) {
-      const selectedItem = inventoryItems.find(item => item._id === newItem.item);
-      
-      if (selectedItem) {
-        const existingQuantity = quotationData.items
-          .filter(item => item.item === newItem.item)
-          .reduce((sum, item) => sum + item.quantity, 0);
-        
-        const totalRequested = existingQuantity + newItem.quantity;
-        
-        if (totalRequested > selectedItem.quantity) {
-          setStockWarning(
-            `Only ${selectedItem.quantity - existingQuantity} items available (${existingQuantity} already in cart)`
-          );
-        } else {
-          setStockWarning(null);
-        }
-      }
+  const itemTotal = useMemo(() => newItem.quantity * newItem.unitPrice, [newItem.quantity, newItem.unitPrice]);
+
+  const stockWarning = useMemo(() => {
+    if (!newItem.item) return null;
+    const selectedItem = inventoryItems.find(item => item._id === newItem.item);
+    if (!selectedItem) return null;
+    const existingQuantity = quotationData.items.filter(item => item.item === newItem.item).reduce((sum, it) => sum + it.quantity, 0);
+    const remaining = selectedItem.quantity - existingQuantity;
+    if (newItem.quantity + existingQuantity > selectedItem.quantity) {
+      return `Only ${remaining} items available (${existingQuantity} already in cart)`;
     }
-  }, [newItem.quantity, newItem.unitPrice, newItem.item, inventoryItems, quotationData.items]);
+    return null;
+  }, [newItem.item, newItem.quantity, inventoryItems, quotationData.items]);
 
-  const handleItemSelect = (inventoryItem: InventoryItem) => {
-    setNewItem({
-      item: inventoryItem._id,
-      itemName: inventoryItem.product_name,
-      quantity: 1,
-      unitPrice: inventoryItem.sell_price,
-    });
+  const handleItemSelect = useCallback((inventoryItem: InventoryItem) => {
+    setNewItem({ item: inventoryItem._id, itemName: inventoryItem.product_name, quantity: 1, unitPrice: inventoryItem.sell_price });
     setItemSearchTerm(`${inventoryItem.product_name} (${inventoryItem.product_code})`);
     setShowItemSuggestions(false);
-    setStockWarning(null);
-  };
+  }, [setItemSearchTerm, setShowItemSuggestions]);
 
-  const handleCustomerSelect = (customer: Customer) => {
+  const handleCustomerSelect = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     onCustomerIdChange(customer._id, customer);
     setCustomerSearchTerm(`${customer.fullName} (${customer.phone})`);
     setShowCustomerSuggestions(false);
     setCustomerModalMode(null);
-  };
+  }, [onCustomerIdChange, setCustomerSearchTerm, setShowCustomerSuggestions]);
 
-  const handleClearCustomer = () => {
+  const handleClearCustomer = useCallback(() => {
     setSelectedCustomer(null);
     onCustomerIdChange("");
     setCustomerSearchTerm("");
     setCustomerModalMode(null);
-  };
+  }, [onCustomerIdChange, setCustomerSearchTerm]);
 
-  const handleClearItemSelection = () => {
+  const handleClearItemSelection = useCallback(() => {
     setNewItem({ item: "", quantity: 1, unitPrice: 0, itemName: "" });
     setItemSearchTerm("");
-    setItemTotal(0);
-    setStockWarning(null);
-  };
+  }, [setItemSearchTerm]);
 
-  const handleAddItem = () => {
+  const handleAddItem = useCallback(() => {
     if (!newItem.item || newItem.quantity <= 0 || newItem.unitPrice < 0) {
       alert("Please select an item and fill all required fields");
       return;
     }
 
     const existingItem = quotationData.items.find(item => item.item === newItem.item);
-    
+    const inventoryItem = inventoryItems.find(item => item._id === newItem.item);
+
     if (existingItem) {
-      const inventoryItem = inventoryItems.find(item => item._id === newItem.item);
       if (inventoryItem) {
         const newTotalQuantity = existingItem.quantity + newItem.quantity;
         if (newTotalQuantity > inventoryItem.quantity) {
           alert(`Cannot add ${newItem.quantity} items. Only ${inventoryItem.quantity - existingItem.quantity} more available.`);
           return;
         }
-        
+
         const updatedQuantity = existingItem.quantity + newItem.quantity;
         const updatedTotal = updatedQuantity * existingItem.unitPrice;
-        
-        onUpdateItem(existingItem.id, { 
-          quantity: updatedQuantity,
-          total: updatedTotal
-        });
+        onUpdateItem(existingItem.id, { quantity: updatedQuantity, total: updatedTotal });
       }
     } else {
-      const selectedItem = inventoryItems.find(item => item._id === newItem.item);
-      if (selectedItem && newItem.quantity > selectedItem.quantity) {
-        alert(`Cannot add ${newItem.quantity} items. Only ${selectedItem.quantity} in stock.`);
+      if (inventoryItem && newItem.quantity > inventoryItem.quantity) {
+        alert(`Cannot add ${newItem.quantity} items. Only ${inventoryItem.quantity} in stock.`);
         return;
       }
-
       onAddItem(newItem);
     }
 
     handleClearItemSelection();
-  };
+  }, [newItem, quotationData.items, inventoryItems, onAddItem, onUpdateItem, handleClearItemSelection]);
 
-  const handleUpdateItemQuantity = (id: string, newQuantity: number) => {
+  const handleUpdateItemQuantity = useCallback((id: string, newQuantity: number) => {
     const item = quotationData.items.find(item => item.id === id);
-    if (item) {
-      const inventoryItem = inventoryItems.find(inv => inv._id === item.item);
-      if (inventoryItem && newQuantity > inventoryItem.quantity) {
-        alert(`Cannot update to ${newQuantity} items. Only ${inventoryItem.quantity} in stock.`);
-        return;
-      }
-      onUpdateItem(id, { quantity: newQuantity });
+    if (!item) return;
+    const inventoryItem = inventoryItems.find(inv => inv._id === item.item);
+    if (inventoryItem && newQuantity > inventoryItem.quantity) {
+      alert(`Cannot update to ${newQuantity} items. Only ${inventoryItem.quantity} in stock.`);
+      return;
     }
-  };
+    onUpdateItem(id, { quantity: newQuantity });
+  }, [quotationData.items, inventoryItems, onUpdateItem]);
 
-  const handleCustomerFormSubmit = async (formData: any) => {
+  type CustomerFormData = Omit<Customer, '_id'> | Partial<Customer>;
+  const handleCustomerFormSubmit = useCallback(async (formData: CustomerFormData) => {
     try {
       if (customerModalMode === 'edit' && selectedCustomer) {
-        const updated = await updateCustomer(selectedCustomer._id, formData);
+        const updated = await updateCustomer(selectedCustomer._id, formData as Partial<Customer>);
         setSelectedCustomer(updated);
         onCustomerIdChange(updated._id, updated);
         setCustomerSearchTerm(`${updated.fullName} (${updated.phone})`);
         alert("Customer updated successfully!");
       } else {
-        const created = await createCustomer(formData);
+        const created = await createCustomer(formData as Omit<Customer, '_id'>);
         setSelectedCustomer(created);
         onCustomerIdChange(created._id, created);
         setCustomerSearchTerm(`${created.fullName} (${created.phone})`);
@@ -189,31 +157,21 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     } catch (error) {
       throw error;
     }
-  };
+  }, [customerModalMode, selectedCustomer, updateCustomer, createCustomer, onCustomerIdChange, setCustomerSearchTerm]);
 
-  const getCustomerPrefillData = () => {
+  const getCustomerPrefillData = useCallback(() => {
     if (!customerSearchTerm) return undefined;
-    
-    if (/^\d+$/.test(customerSearchTerm) && customerSearchTerm.length >= 2) {
-      return { phone: customerSearchTerm };
-    } else if (customerSearchTerm.includes(' ')) {
-      return { fullName: customerSearchTerm };
-    } else if (customerSearchTerm.includes('@')) {
-      return { email: customerSearchTerm };
-    }
-    
+    if (/^\d+$/.test(customerSearchTerm) && customerSearchTerm.length >= 2) return { phone: customerSearchTerm };
+    if (customerSearchTerm.includes(' ')) return { fullName: customerSearchTerm };
+    if (customerSearchTerm.includes('@')) return { email: customerSearchTerm };
     return undefined;
-  };
+  }, [customerSearchTerm]);
 
-  const calculateTotals = () => {
-    return {
-      subTotal: quotationData.subTotal,
-      discountAmount: quotationData.discount,
-      totalAmount: quotationData.totalAmount,
-    };
-  };
-
-  const { subTotal, discountAmount, totalAmount } = calculateTotals();
+  const { subTotal, discountAmount, totalAmount } = useMemo(() => ({
+    subTotal: quotationData.subTotal,
+    discountAmount: quotationData.discount,
+    totalAmount: quotationData.totalAmount,
+  }), [quotationData.subTotal, quotationData.discount, quotationData.totalAmount]);
 
   const handleDiscountPercentageChange = (value: string) => {
     const percentage = parseFloat(value) || 0;
@@ -243,9 +201,18 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         />
       )}
 
-      <div className="bg-[#1e293b] rounded-lg p-6 border border-[#334155]">
-        <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Quotation</h2>
-        
+      <div className="bg-[#1e293b] rounded-lg p-5 border border-[#334155]">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-200">
+            Create Quotation
+          </h2>
+          <span className="text-sm text-gray-400">
+            {quotationData.quotationId || "—"}
+          </span>
+        </div>
+
+        <hr className="border-[#334155] mb-4" />
+
         <CustomerSearchAndManagement
           searchTerm={customerSearchTerm}
           onSearchChange={setCustomerSearchTerm}
@@ -383,7 +350,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
               onUpdateQuantity={handleUpdateItemQuantity}
               onRemoveItem={onRemoveItem}
             />
-            
+
             <QuotationSummary
               subTotal={subTotal}
               discountPercentage={quotationData.discountPercentage}
