@@ -60,6 +60,7 @@ export interface QuotationData {
 }
 
 export interface BackendQuotationData {
+  _id?: string;
   quotationId?: string;
   customer: string;
   items: QuotationItemBackend[];
