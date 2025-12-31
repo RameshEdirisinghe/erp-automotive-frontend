@@ -94,12 +94,79 @@ export const invoiceService = {
     }
   },
 
-  // Create new invoice
+  // Create new invoice 
   async create(invoiceData: BackendInvoiceData): Promise<InvoiceResponse> {
     try {
+      console.log('[DEBUG] InvoiceService.create() called with data:', invoiceData);
+      
+      // Validate required fields before sending
+      if (!invoiceData.customer) {
+        console.error('[DEBUG] Validation failed: Customer ID is required');
+        throw new Error('Customer ID is required');
+      }
+      
+      if (!invoiceData.items || invoiceData.items.length === 0) {
+        console.error('[DEBUG] Validation failed: At least one item is required');
+        throw new Error('At least one item is required');
+      }
+      
+      // Ensure all item fields are present
+      invoiceData.items.forEach((item, index) => {
+        if (!item.item) {
+          console.error(`[DEBUG] Validation failed: Item ${index + 1} is missing item ID`);
+          throw new Error(`Item ${index + 1} is missing item ID`);
+        }
+        if (!item.quantity || item.quantity <= 0) {
+          console.error(`[DEBUG] Validation failed: Item ${index + 1} quantity must be greater than 0`);
+          throw new Error(`Item ${index + 1} quantity must be greater than 0`);
+        }
+        if (!item.unitPrice || item.unitPrice < 0) {
+          console.error(`[DEBUG] Validation failed: Item ${index + 1} unit price must be valid`);
+          throw new Error(`Item ${index + 1} unit price must be valid`);
+        }
+      });
+
+      console.log('[DEBUG] Sending POST request to /invoices');
       const response = await api.post<InvoiceResponse>("/invoices", invoiceData);
+      
+      console.log('[DEBUG] Invoice created successfully:', response.data);
       return response.data;
     } catch (error: unknown) {
+      console.error('[DEBUG] Error creating invoice:', error);
+      
+      if (error instanceof Error) {
+        console.error('[DEBUG] Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+        
+        // axios error response
+        if (error.message.includes('status code 400')) {
+          console.error('[DEBUG] 400 Bad Request - Likely backend validation error');
+          console.error('[DEBUG] Check the Network tab in browser devtools for detailed error');
+        }
+        
+        const axiosError = error as any;
+        if (axiosError.response) {
+          console.error('[DEBUG] Server response:', {
+            status: axiosError.response.status,
+            data: axiosError.response.data,
+            headers: axiosError.response.headers
+          });
+          
+          // Extract backend error message
+          if (axiosError.response.data && axiosError.response.data.message) {
+            throw new Error(`Backend error: ${axiosError.response.data.message}`);
+          } else if (axiosError.response.data) {
+            throw new Error(`Backend error: ${JSON.stringify(axiosError.response.data)}`);
+          }
+        } else if (axiosError.request) {
+          console.error('[DEBUG] No response received:', axiosError.request);
+          throw new Error('No response from server. Please check your connection.');
+        }
+      }
+      
       const errorMessage = error instanceof Error 
         ? error.message 
         : "Failed to create invoice";

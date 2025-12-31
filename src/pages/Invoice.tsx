@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Menu, X } from "lucide-react";
+import { User, FileText, Download, Printer, Menu, X, Save } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type {
   InvoiceData,
   InvoiceItem,
+  BackendInvoiceData,
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
@@ -40,6 +41,7 @@ const Invoice: React.FC = () => {
   const [isMobileView, setIsMobileView] = useState(false);
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
@@ -125,15 +127,18 @@ const Invoice: React.FC = () => {
     const loadData = async () => {
       try {
         setIsLoading(true);
+        console.log('[DEBUG] Loading inventory items...');
 
         const items = await inventoryService.getAll();
+        console.log('[DEBUG] Inventory items loaded:', items);
         setInventoryItems(items as InvoiceInventoryItem[]);
 
         const nextId = await invoiceService.getNextId();
+        console.log('[DEBUG] Next invoice ID:', nextId);
         setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
 
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('[DEBUG] Error loading data:', error);
         setAlert({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to load data'
@@ -147,6 +152,7 @@ const Invoice: React.FC = () => {
   }, []);
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
+    console.log('[DEBUG] Adding item:', item);
     setInvoiceData(prev => {
       const existingItemIndex = prev.items.findIndex(
         existing => existing.item === item.item
@@ -176,6 +182,9 @@ const Invoice: React.FC = () => {
 
       const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
 
+      console.log('[DEBUG] Updated items after add:', updatedItems);
+      console.log('[DEBUG] Updated totals:', totals);
+
       return {
         ...prev,
         items: updatedItems,
@@ -185,6 +194,7 @@ const Invoice: React.FC = () => {
   };
 
   const handleRemoveItem = (id: string) => {
+    console.log('[DEBUG] Removing item with id:', id);
     setInvoiceData(prev => {
       const updatedItems = prev.items.filter(item => item.id !== id);
       const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
@@ -198,6 +208,7 @@ const Invoice: React.FC = () => {
   };
 
   const handleUpdateItem = (id: string, updates: Partial<InvoiceItem>) => {
+    console.log('[DEBUG] Updating item:', id, updates);
     setInvoiceData(prev => {
       const updatedItems = prev.items.map(item => {
         if (item.id !== id) {
@@ -227,6 +238,7 @@ const Invoice: React.FC = () => {
   };
 
   const handleFieldChange = (field: keyof InvoiceData, value: string | number | boolean | Date) => {
+    console.log('[DEBUG] Field change:', field, value);
     setInvoiceData(prev => {
       if (field === 'discountPercentage') {
         const numericValue = typeof value === 'number' ? value : Number(value);
@@ -248,11 +260,243 @@ const Invoice: React.FC = () => {
   };
 
   const handleCustomerIdChange = (customerId: string, customerDetails?: any) => {
+    console.log('[DEBUG] Customer changed:', { customerId, customerDetails });
     setInvoiceData(prev => ({
       ...prev,
       customer: customerId,
       customerDetails: customerDetails
     }));
+  };
+
+  // Helper function to validate data
+  const validateInvoiceData = (): string[] => {
+    const errors: string[] = [];
+
+    console.log('[DEBUG] Validating invoice data:', invoiceData);
+
+    // Check customer
+    if (!invoiceData.customer) {
+      errors.push('Customer ID is required');
+      console.error('[DEBUG] Validation error: No customer ID');
+    } else if (typeof invoiceData.customer !== 'string') {
+      errors.push('Customer ID must be a string');
+      console.error('[DEBUG] Validation error: Customer ID is not a string', invoiceData.customer);
+    }
+
+    // Check customer details
+    if (!invoiceData.customerDetails) {
+      console.warn('[DEBUG] Customer details not found, but continuing...');
+    }
+
+    // Check items
+    if (invoiceData.items.length === 0) {
+      errors.push('At least one item is required');
+      console.error('[DEBUG] Validation error: No items');
+    } else {
+      invoiceData.items.forEach((item, index) => {
+        console.log(`[DEBUG] Validating item ${index + 1}:`, item);
+        
+        if (!item.item) {
+          errors.push(`Item ${index + 1}: Missing inventory item ID`);
+          console.error(`[DEBUG] Validation error: Item ${index + 1} missing ID`);
+        }
+        
+        if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+          errors.push(`Item ${index + 1}: Quantity must be greater than 0`);
+          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid quantity`, item.quantity);
+        }
+        
+        if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
+          errors.push(`Item ${index + 1}: Unit price must be valid`);
+          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid unit price`, item.unitPrice);
+        }
+        
+        if (typeof item.total !== 'number' || item.total < 0) {
+          errors.push(`Item ${index + 1}: Total must be valid`);
+          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid total`, item.total);
+        }
+      });
+    }
+
+    // Check vehicle number
+    if (!invoiceData.vehicleNumber || invoiceData.vehicleNumber.trim().length === 0) {
+      errors.push('Vehicle number is required');
+      console.error('[DEBUG] Validation error: No vehicle number');
+    }
+
+    // Check dates
+    if (!invoiceData.issueDate) {
+      errors.push('Issue date is required');
+      console.error('[DEBUG] Validation error: No issue date');
+    }
+    
+    if (!invoiceData.dueDate) {
+      errors.push('Due date is required');
+      console.error('[DEBUG] Validation error: No due date');
+    }
+
+    // Check payment method and status
+    if (!invoiceData.paymentMethod) {
+      errors.push('Payment method is required');
+      console.error('[DEBUG] Validation error: No payment method');
+    }
+    
+    if (!invoiceData.paymentStatus) {
+      errors.push('Payment status is required');
+      console.error('[DEBUG] Validation error: No payment status');
+    }
+
+    return errors;
+  };
+
+  // Save invoice to database
+  const handleSaveInvoice = async () => {
+    console.log('[DEBUG] Save button clicked');
+    console.log('[DEBUG] Current invoice data:', invoiceData);
+
+    // Validate data first
+    const validationErrors = validateInvoiceData();
+    if (validationErrors.length > 0) {
+      console.error('[DEBUG] Validation failed with errors:', validationErrors);
+      setAlert({
+        type: 'error',
+        message: `Please fix the following errors:\n• ${validationErrors.join('\n• ')}`
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setAlert({
+        type: 'info',
+        message: 'Saving invoice...'
+      });
+
+      console.log('[DEBUG] Preparing backend data...');
+
+      // Prepare data for backend with proper formatting
+      const backendData: BackendInvoiceData = {
+        invoiceId: invoiceData.invoiceId,
+        customer: invoiceData.customer,
+        items: invoiceData.items.map(item => ({
+          item: item.item,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        })),
+        subTotal: invoiceData.subTotal,
+        discount: invoiceData.discount,
+        totalAmount: invoiceData.totalAmount,
+        paymentStatus: invoiceData.paymentStatus,
+        paymentMethod: invoiceData.paymentMethod,
+        bankDepositDate: invoiceData.bankDepositDate ? invoiceData.bankDepositDate : undefined,
+        issueDate: invoiceData.issueDate,
+        dueDate: invoiceData.dueDate,
+        vehicleNumber: invoiceData.vehicleNumber,
+        notes: invoiceData.notes || ''
+      };
+
+      console.log('[DEBUG] Backend data prepared:', backendData);
+      console.log('[DEBUG] Data types:', {
+        customer: typeof backendData.customer,
+        customerValue: backendData.customer,
+        itemsCount: backendData.items.length,
+        items: backendData.items.map(item => ({
+          itemType: typeof item.item,
+          itemValue: item.item,
+          quantityType: typeof item.quantity,
+          unitPriceType: typeof item.unitPrice,
+          totalType: typeof item.total
+        })),
+        issueDateType: typeof backendData.issueDate,
+        dueDateType: typeof backendData.dueDate,
+        bankDepositDateType: typeof backendData.bankDepositDate
+      });
+
+      console.log('[DEBUG] Calling invoiceService.create()...');
+      
+      // Call the service to save invoice
+      const savedInvoice = await invoiceService.create(backendData);
+      
+      console.log('[DEBUG] Invoice saved successfully:', savedInvoice);
+      
+      // Update local state with the saved invoice ID
+      setInvoiceData(prev => ({
+        ...prev,
+        _id: savedInvoice._id,
+        invoiceId: savedInvoice.invoiceId
+      }));
+
+      setAlert({
+        type: 'success',
+        message: `Invoice saved successfully! Invoice ID: ${savedInvoice.invoiceId}`
+      });
+
+      console.log('[DEBUG] Getting next invoice ID for new invoice...');
+      
+      // Refresh the next invoice ID for next invoice
+      const nextId = await invoiceService.getNextId();
+      
+      // Reset form for next invoice but keep customer if they want to create another
+      setInvoiceData(prev => ({ 
+        ...prev,
+        _id: undefined,
+        invoiceId: nextId,
+        items: [],
+        subTotal: 0,
+        discount: 0,
+        discountPercentage: 0,
+        totalAmount: 0,
+        vehicleNumber: "",
+        notes: "",
+        // Keep customer and customerDetails for convenience
+      }));
+
+      console.log('[DEBUG] Form reset for new invoice. Next ID:', nextId);
+
+    } catch (error) {
+      console.error('[DEBUG] Error saving invoice:', error);
+      
+      // Detailed error logging
+      if (error instanceof Error) {
+        console.error('[DEBUG] Error name:', error.name);
+        console.error('[DEBUG] Error message:', error.message);
+        console.error('[DEBUG] Error stack:', error.stack);
+        
+        // Try to extract more information if it's an HTTP error
+        if (error.message.includes('400')) {
+          console.error('[DEBUG] HTTP 400 Bad Request - Likely validation error');
+          console.error('[DEBUG] Please check:');
+          console.error('[DEBUG] 1. Customer ID format (should be MongoDB ObjectId)');
+          console.error('[DEBUG] 2. Item IDs format (should be MongoDB ObjectId)');
+          console.error('[DEBUG] 3. Date formats');
+          console.error('[DEBUG] 4. Required fields are not empty');
+        }
+      }
+
+      // User-friendly error message
+      let errorMessage = 'Failed to save invoice. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('400')) {
+          errorMessage = 'Validation error: Please check all required fields are filled correctly.';
+        } else if (error.message.includes('401') || error.message.includes('403')) {
+          errorMessage = 'Authentication error. Please log in again.';
+        } else if (error.message.includes('Network Error')) {
+          errorMessage = 'Network error. Please check your connection.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      setIsSaving(false);
+      console.log('[DEBUG] Save operation completed');
+    }
   };
 
   const downloadPDF = async () => {
@@ -536,6 +780,21 @@ const Invoice: React.FC = () => {
             <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
               Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
             </div>
+            
+            {/* Save Button */}
+            <button
+              onClick={handleSaveInvoice}
+              disabled={isLoading || isSaving || invoiceData.items.length === 0}
+              className="flex items-center gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
+            </button>
+            
             <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
