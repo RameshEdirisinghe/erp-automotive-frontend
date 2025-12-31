@@ -49,27 +49,52 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     setShowSuggestions: setShowItemSuggestions,
   } = useItemSearch(inventoryItems);
 
-  const [newItem, setNewItem] = useState<Omit<QuotationItem, 'id' | 'total'>>({ item: "", quantity: 1, unitPrice: 0, itemName: "" });
+  const [newItem, setNewItem] = useState({ 
+    item: "", 
+    quantity: "1", 
+    unitPrice: "0", 
+    itemName: "" 
+  });
+
+  const [discountInput, setDiscountInput] = useState(quotationData.discountPercentage.toString());
+
+  React.useEffect(() => {
+    setDiscountInput(quotationData.discountPercentage.toString());
+  }, [quotationData.discountPercentage]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerModalMode, setCustomerModalMode] = useState<'view' | 'create' | 'edit' | null>(null);
 
-  const itemTotal = useMemo(() => newItem.quantity * newItem.unitPrice, [newItem.quantity, newItem.unitPrice]);
+  const itemTotal = useMemo(() => {
+    const qty = parseInt(newItem.quantity) || 0;
+    const price = parseFloat(newItem.unitPrice) || 0;
+    return qty * price;
+  }, [newItem.quantity, newItem.unitPrice]);
 
   const stockWarning = useMemo(() => {
     if (!newItem.item) return null;
     const selectedItem = inventoryItems.find(item => item._id === newItem.item);
     if (!selectedItem) return null;
-    const existingQuantity = quotationData.items.filter(item => item.item === newItem.item).reduce((sum, it) => sum + it.quantity, 0);
+    
+    const qty = parseInt(newItem.quantity) || 0;
+    const existingQuantity = quotationData.items
+      .filter(item => item.item === newItem.item)
+      .reduce((sum, it) => sum + it.quantity, 0);
+    
     const remaining = selectedItem.quantity - existingQuantity;
-    if (newItem.quantity + existingQuantity > selectedItem.quantity) {
+    if (qty + existingQuantity > selectedItem.quantity) {
       return `Only ${remaining} items available (${existingQuantity} already in cart)`;
     }
     return null;
   }, [newItem.item, newItem.quantity, inventoryItems, quotationData.items]);
 
   const handleItemSelect = useCallback((inventoryItem: InventoryItem) => {
-    setNewItem({ item: inventoryItem._id, itemName: inventoryItem.product_name, quantity: 1, unitPrice: inventoryItem.sell_price });
+    setNewItem({ 
+      item: inventoryItem._id, 
+      itemName: inventoryItem.product_name, 
+      quantity: "1", 
+      unitPrice: inventoryItem.sell_price.toString() 
+    });
     setItemSearchTerm(`${inventoryItem.product_name} (${inventoryItem.product_code})`);
     setShowItemSuggestions(false);
   }, [setItemSearchTerm, setShowItemSuggestions]);
@@ -90,13 +115,16 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   }, [onCustomerIdChange, setCustomerSearchTerm]);
 
   const handleClearItemSelection = useCallback(() => {
-    setNewItem({ item: "", quantity: 1, unitPrice: 0, itemName: "" });
+    setNewItem({ item: "", quantity: "1", unitPrice: "0", itemName: "" });
     setItemSearchTerm("");
   }, [setItemSearchTerm]);
 
   const handleAddItem = useCallback(() => {
-    if (!newItem.item || newItem.quantity <= 0 || newItem.unitPrice < 0) {
-      alert("Please select an item and fill all required fields");
+    const qty = parseInt(newItem.quantity);
+    const price = parseFloat(newItem.unitPrice);
+
+    if (!newItem.item || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
+      alert("Please select an item and enter valid quantity and price");
       return;
     }
 
@@ -105,22 +133,31 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
 
     if (existingItem) {
       if (inventoryItem) {
-        const newTotalQuantity = existingItem.quantity + newItem.quantity;
+        const newTotalQuantity = existingItem.quantity + qty;
         if (newTotalQuantity > inventoryItem.quantity) {
-          alert(`Cannot add ${newItem.quantity} items. Only ${inventoryItem.quantity - existingItem.quantity} more available.`);
+          alert(`Cannot add ${qty} items. Only ${inventoryItem.quantity - existingItem.quantity} more available.`);
           return;
         }
 
-        const updatedQuantity = existingItem.quantity + newItem.quantity;
-        const updatedTotal = updatedQuantity * existingItem.unitPrice;
-        onUpdateItem(existingItem.id, { quantity: updatedQuantity, total: updatedTotal });
+        const updatedQuantity = existingItem.quantity + qty;
+        const updatedTotal = updatedQuantity * price; // Use the price from the form
+        onUpdateItem(existingItem.id, { 
+          quantity: updatedQuantity, 
+          unitPrice: price,
+          total: updatedTotal 
+        });
       }
     } else {
-      if (inventoryItem && newItem.quantity > inventoryItem.quantity) {
-        alert(`Cannot add ${newItem.quantity} items. Only ${inventoryItem.quantity} in stock.`);
+      if (inventoryItem && qty > inventoryItem.quantity) {
+        alert(`Cannot add ${qty} items. Only ${inventoryItem.quantity} in stock.`);
         return;
       }
-      onAddItem(newItem);
+      onAddItem({
+        item: newItem.item,
+        itemName: newItem.itemName,
+        quantity: qty,
+        unitPrice: price
+      });
     }
 
     handleClearItemSelection();
@@ -129,13 +166,10 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   const handleUpdateItemQuantity = useCallback((id: string, newQuantity: number) => {
     const item = quotationData.items.find(item => item.id === id);
     if (!item) return;
-    const inventoryItem = inventoryItems.find(inv => inv._id === item.item);
-    if (inventoryItem && newQuantity > inventoryItem.quantity) {
-      alert(`Cannot update to ${newQuantity} items. Only ${inventoryItem.quantity} in stock.`);
-      return;
-    }
+    
+    // We allow the update but the UI will show a warning if stock is insufficient
     onUpdateItem(id, { quantity: newQuantity });
-  }, [quotationData.items, inventoryItems, onUpdateItem]);
+  }, [quotationData.items, onUpdateItem]);
 
   type CustomerFormData = Omit<Customer, '_id'> | Partial<Customer>;
   const handleCustomerFormSubmit = useCallback(async (formData: CustomerFormData) => {
@@ -174,8 +208,19 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   }), [quotationData.subTotal, quotationData.discount, quotationData.totalAmount]);
 
   const handleDiscountPercentageChange = (value: string) => {
-    const percentage = parseFloat(value) || 0;
+    setDiscountInput(value);
+    const percentage = parseFloat(value);
+    if (!isNaN(percentage)) {
+      // Live update parent but don't clamp yet
+      onFieldChange('discountPercentage', percentage);
+    }
+  };
+
+  const handleDiscountBlur = () => {
+    let percentage = parseFloat(discountInput);
+    if (isNaN(percentage)) percentage = 0;
     const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
+    setDiscountInput(clampedPercentage.toString());
     onFieldChange('discountPercentage', clampedPercentage);
   };
 
@@ -202,17 +247,6 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
       )}
 
       <div className="bg-[#1e293b] rounded-lg p-5 border border-[#334155]">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-200">
-            Create Quotation
-          </h2>
-          <span className="text-sm text-gray-400">
-            {quotationData.quotationId || "—"}
-          </span>
-        </div>
-
-        <hr className="border-[#334155] mb-4" />
-
         <CustomerSearchAndManagement
           searchTerm={customerSearchTerm}
           onSearchChange={setCustomerSearchTerm}
@@ -297,8 +331,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                 min="0"
                 max="100"
                 step="0.01"
-                value={quotationData.discountPercentage}
+                value={discountInput}
                 onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                onBlur={handleDiscountBlur}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -334,6 +369,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         newItem={newItem}
         onItemSelect={handleItemSelect}
         onQuantityChange={(quantity) => setNewItem(prev => ({ ...prev, quantity }))}
+        onUnitPriceChange={(unitPrice) => setNewItem(prev => ({ ...prev, unitPrice }))}
         onAddItem={handleAddItem}
         onClearSelection={handleClearItemSelection}
         itemTotal={itemTotal}
