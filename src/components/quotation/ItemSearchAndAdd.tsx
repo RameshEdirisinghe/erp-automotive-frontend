@@ -11,9 +11,15 @@ interface ItemSearchAndAddProps {
   showSuggestions: boolean;
   onShowSuggestionsChange: (show: boolean) => void;
   filteredItems: InventoryItem[];
-  newItem: Omit<QuotationItem, 'id' | 'total'>;
+  newItem: {
+    item: string;
+    itemName: string;
+    quantity: string | number;
+    unitPrice: string | number;
+  };
   onItemSelect: (item: InventoryItem) => void;
-  onQuantityChange: (quantity: number) => void;
+  onQuantityChange: (value: string) => void;
+  onUnitPriceChange: (value: string) => void;
   onAddItem: () => void;
   onClearSelection: () => void;
   itemTotal: number;
@@ -30,6 +36,7 @@ export const ItemSearchAndAdd: React.FC<ItemSearchAndAddProps> = ({
   newItem,
   onItemSelect,
   onQuantityChange,
+  onUnitPriceChange,
   onAddItem,
   onClearSelection,
   itemTotal,
@@ -146,8 +153,9 @@ export const ItemSearchAndAdd: React.FC<ItemSearchAndAddProps> = ({
               type="number"
               min="1"
               value={newItem.quantity}
-              onChange={(e) => onQuantityChange(parseInt(e.target.value) || 1)}
+              onChange={(e) => onQuantityChange(e.target.value)}
               disabled={!newItem.item}
+              placeholder="Enter quantity"
               className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
@@ -160,10 +168,12 @@ export const ItemSearchAndAdd: React.FC<ItemSearchAndAddProps> = ({
               min="0"
               step="0.01"
               value={newItem.unitPrice}
-              readOnly
-              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-gray-400 focus:outline-none cursor-not-allowed"
+              onChange={(e) => onUnitPriceChange(e.target.value)}
+              disabled={!newItem.item}
+              placeholder="Enter unit price"
+              className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <div className="text-xs text-gray-500 mt-1">Auto-filled from item selection</div>
+            <div className="text-xs text-gray-500 mt-1">Auto-filled from item selection, but editable</div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
