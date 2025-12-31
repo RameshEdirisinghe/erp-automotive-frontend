@@ -36,6 +36,7 @@ import jsPDF from "jspdf";
 import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
+import CustomConfirm from "../components/CustomConfirm";
 
 const Quotation: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -62,7 +63,21 @@ const Quotation: React.FC = () => {
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
 
-  const [quotationData, setQuotationData] = useState<QuotationData>({
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "warning" | "danger" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: "",
+    onConfirm: () => { },
+  });
+
+  const getInitialQuotationData = (): QuotationData => ({
     quotationId: "",
     customer: "",
     customerDetails: undefined,
@@ -77,6 +92,8 @@ const Quotation: React.FC = () => {
     validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     notes: "",
   });
+
+  const [quotationData, setQuotationData] = useState<QuotationData>(getInitialQuotationData());
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -121,32 +138,35 @@ const Quotation: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, [isMobileView]);
 
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+
+      const items = await inventoryService.getAll();
+      setInventoryItems(items as QuotationInventoryItem[]);
+
+      const nextId = await quotationService.getNextId();
+      setQuotationData({
+        ...getInitialQuotationData(),
+        quotationId: nextId
+      });
+      lastSavedRef.current = null;
+      setIsDirty(false);
+      lastSavedAtRef.current = null;
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to load data'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-
-        const items = await inventoryService.getAll();
-        setInventoryItems(items as QuotationInventoryItem[]);
-
-        const nextId = await quotationService.getNextId();
-        setQuotationData(prev => ({ ...prev, quotationId: nextId }));
-        lastSavedRef.current = null;
-        setIsDirty(false);
-        lastSavedAtRef.current = null;
-
-      } catch (error) {
-        console.error('Error loading data:', error);
-        setAlert({
-          type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to load data'
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
+    loadInitialData();
   }, []);
 
   const handleAddItem = (item: Omit<QuotationItem, 'id' | 'total'>) => {
@@ -168,7 +188,6 @@ const Quotation: React.FC = () => {
       };
       newItems[existingItemIndex] = updatedItem;
     } else {
-      // Add new item
       const newItem: QuotationItem = {
         ...item,
         id: Date.now().toString(),
@@ -191,28 +210,41 @@ const Quotation: React.FC = () => {
     setIsDirty(true);
   };
 
-  // Cancel edit: restore to last saved snapshot
-  const handleCancelEdit = () => {
-    if (!lastSavedRef.current) {
-      setAlert({ type: 'info', message: 'No saved snapshot to restore' });
-      return;
+  const handleCancelEdit = async () => {
+    if (quotationData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Discard Changes",
+        message: "Are you sure you want to discard changes? You will lose any unsaved modifications.",
+        confirmText: "Discard",
+        type: "danger",
+        onConfirm: async () => {
+          await loadInitialData();
+          setViewMode('manage');
+        }
+      });
+    } else {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Clear Quotation",
+        message: "Are you sure you want to clear this quotation? All unsaved changes will be lost.",
+        confirmText: "Clear",
+        type: "danger",
+        onConfirm: async () => {
+          await loadInitialData();
+          setAlert({ type: 'success', message: 'Quotation cleared' });
+        }
+      });
     }
-
-    setQuotationData({ ...(lastSavedRef.current as QuotationData) });
-    setIsDirty(false);
-    setAlert({ type: 'success', message: 'Changes discarded' });
   };
 
-  // Save changes when editing an existing quotation
   const handleSaveChanges = async () => {
     const saved = await handleSave();
     if (saved) {
       lastSavedRef.current = { ...quotationData };
-      setAlert({ type: 'success', message: 'Quotation updated successfully!' });
     }
   };
 
-  // Warn user about unsaved changes when trying to leave the page
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) {
@@ -318,7 +350,6 @@ const Quotation: React.FC = () => {
   };
 
   const handleSave = async () => {
-    // Check if required data is present
     if (!quotationData.customer || quotationData.items.length === 0) {
       setAlert({
         type: 'error',
@@ -331,9 +362,10 @@ const Quotation: React.FC = () => {
       setIsSaving(true);
 
       const backendData = prepareQuotationForSave(quotationData);
+      console.log(backendData);
+
 
       if (quotationData._id) {
-        // Update existing quotation
         setAlert({
           type: 'info',
           message: 'Updating quotation...'
@@ -345,12 +377,10 @@ const Quotation: React.FC = () => {
           type: 'success',
           message: 'Quotation updated successfully!'
         });
-        // Update last-saved snapshot after successful update
         lastSavedRef.current = { ...quotationData };
         setIsDirty(false);
         lastSavedAtRef.current = new Date().toISOString();
       } else {
-        // Create new quotation
         setAlert({
           type: 'info',
           message: 'Saving quotation...'
@@ -358,7 +388,6 @@ const Quotation: React.FC = () => {
 
         const response = await quotationService.create(backendData);
 
-        // Update quotationData with the returned _id
         setQuotationData(prev => ({
           ...prev,
           _id: response._id
@@ -368,7 +397,6 @@ const Quotation: React.FC = () => {
           type: 'success',
           message: 'Quotation saved successfully!'
         });
-        // Update last-saved snapshot after successful create
         lastSavedRef.current = { ...quotationData, _id: response._id } as QuotationData;
         setIsDirty(false);
         lastSavedAtRef.current = new Date().toISOString();
@@ -461,35 +489,32 @@ const Quotation: React.FC = () => {
     if (isMobileView) {
       setActivePanel('form');
     }
-
-    setAlert({
-      type: 'success',
-      message: `Quotation ${quotation.quotationId} loaded for ${mode === 'view' ? 'viewing' : 'editing'}`
-    });
   };
 
   const handleDeleteQuotation = async (quotationId: string, quotationNumber: string) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete quotation ${quotationNumber}? This action cannot be undone.`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      await quotationService.delete(quotationId);
-      setAlert({
-        type: 'success',
-        message: `Quotation ${quotationNumber} deleted successfully`
-      });
-
-      fetchAllQuotations();
-    } catch (error) {
-      console.error('Error deleting quotation:', error);
-      setAlert({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to delete quotation'
-      });
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Quotation",
+      message: `Are you sure you want to delete quotation ${quotationNumber}? This action cannot be undone.`,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await quotationService.delete(quotationId);
+          setAlert({
+            type: 'success',
+            message: `Quotation ${quotationNumber} deleted successfully`
+          });
+          fetchAllQuotations();
+        } catch (error) {
+          console.error('Error deleting quotation:', error);
+          setAlert({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Failed to delete quotation'
+          });
+        }
+      }
+    });
   };
 
   const handleOpenManageModal = () => {
@@ -550,181 +575,172 @@ const Quotation: React.FC = () => {
       return;
     }
 
-    if (!quotationData._id) {
-      const shouldSave = window.confirm(
-        "This quotation has not been saved yet. Do you want to save it now and then download?"
-      );
-
-      if (shouldSave) {
-        const saved = await handleSave();
-        if (!saved) {
-          return;
-        }
-      } else if (shouldSave === null) {
-        return;
-      }
-    }
-
-    try {
-      setIsGeneratingPDF(true);
-      setAlert({
-        type: 'info',
-        message: 'Generating PDF... Please wait.'
-      });
-
-      const quotationContainer = quotationRef.current;
-
-      const originalTransform = quotationContainer.style.transform;
-      const originalTransformOrigin = quotationContainer.style.transformOrigin;
-      const originalWidth = quotationContainer.style.width;
-      const originalHeight = quotationContainer.style.height;
-
-      quotationContainer.style.transform = 'none';
-      quotationContainer.style.transformOrigin = 'top left';
-      quotationContainer.style.width = '210mm';
-      quotationContainer.style.height = '297mm';
-      quotationContainer.style.position = 'fixed';
-      quotationContainer.style.left = '0';
-      quotationContainer.style.top = '0';
-      quotationContainer.style.zIndex = '9999';
-
-      void quotationContainer.offsetHeight;
-
-      const images = quotationContainer.getElementsByTagName('img');
-      const imageLoadPromises = Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
+    const proceedWithDownload = async () => {
+      try {
+        setIsGeneratingPDF(true);
+        setAlert({
+          type: 'info',
+          message: 'Generating PDF... Please wait.'
         });
-      });
 
-      await Promise.all(imageLoadPromises);
+        const quotationContainer = quotationRef.current!;
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+        const originalTransform = quotationContainer.style.transform;
+        const originalTransformOrigin = quotationContainer.style.transformOrigin;
+        const originalWidth = quotationContainer.style.width;
+        const originalHeight = quotationContainer.style.height;
 
-      const canvas = await html2canvas(quotationContainer, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        onclone: (clonedDoc: Document) => {
-          const clonedContainer = clonedDoc.querySelector('[data-quotation-container]');
-          if (clonedContainer) {
-            (clonedContainer as HTMLElement).style.transform = 'none';
-            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
-            (clonedContainer as HTMLElement).style.width = '210mm';
-            (clonedContainer as HTMLElement).style.height = '297mm';
+        quotationContainer.style.transform = 'none';
+        quotationContainer.style.transformOrigin = 'top left';
+        quotationContainer.style.width = '210mm';
+        quotationContainer.style.height = '297mm';
+        quotationContainer.style.position = 'fixed';
+        quotationContainer.style.left = '0';
+        quotationContainer.style.top = '0';
+        quotationContainer.style.zIndex = '9999';
+
+        void quotationContainer.offsetHeight;
+
+        const images = quotationContainer.getElementsByTagName('img');
+        const imageLoadPromises = Array.from(images).map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        });
+
+        await Promise.all(imageLoadPromises);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const canvas = await html2canvas(quotationContainer, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+          onclone: (clonedDoc: Document) => {
+            const clonedContainer = clonedDoc.querySelector('[data-quotation-container]');
+            if (clonedContainer) {
+              (clonedContainer as HTMLElement).style.transform = 'none';
+              (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+              (clonedContainer as HTMLElement).style.width = '210mm';
+              (clonedContainer as HTMLElement).style.height = '297mm';
+            }
+          }
+        });
+
+        quotationContainer.style.transform = originalTransform;
+        quotationContainer.style.transformOrigin = originalTransformOrigin;
+        quotationContainer.style.width = originalWidth;
+        quotationContainer.style.height = originalHeight;
+        quotationContainer.style.position = '';
+        quotationContainer.style.left = '';
+        quotationContainer.style.top = '';
+        quotationContainer.style.zIndex = '';
+
+        const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+
+        const imgWidth = pdfWidth;
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
+
+        const xPos = 0;
+        const yPos = 0;
+
+        pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
+        pdf.save(`quotation-${quotationData.quotationId}.pdf`);
+
+        setAlert({
+          type: 'success',
+          message: 'PDF downloaded successfully!'
+        });
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
+        });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!quotationData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Quotation",
+        message: "This quotation has not been saved yet. Do you want to save it now and then download?",
+        confirmText: "Save & Download",
+        onConfirm: async () => {
+          const saved = await handleSave();
+          if (saved) {
+            await proceedWithDownload();
           }
         }
       });
-
-      quotationContainer.style.transform = originalTransform;
-      quotationContainer.style.transformOrigin = originalTransformOrigin;
-      quotationContainer.style.width = originalWidth;
-      quotationContainer.style.height = originalHeight;
-      quotationContainer.style.position = '';
-      quotationContainer.style.left = '';
-      quotationContainer.style.top = '';
-      quotationContainer.style.zIndex = '';
-
-      const jpegData = canvas.toDataURL('image/jpeg', 1.0);
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
-
-      const xPos = 0;
-      const yPos = 0;
-
-      pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
-      pdf.save(`quotation-${quotationData.quotationId}.pdf`);
-
-      setAlert({
-        type: 'success',
-        message: 'PDF downloaded successfully!'
-      });
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setAlert({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
-      });
-    } finally {
-      setIsGeneratingPDF(false);
+      return;
     }
+
+    await proceedWithDownload();
   };
 
   const handlePrint = async () => {
     if (!quotationRef.current) return;
 
-    if (!quotationData._id) {
-      const shouldSave = window.confirm(
-        "This quotation has not been saved yet. Do you want to save it now and then print?"
-      );
+    const proceedWithPrint = async () => {
+      try {
+        setIsGeneratingPDF(true);
+        setAlert({
+          type: 'info',
+          message: 'Preparing print... Please wait.'
+        });
 
-      if (shouldSave) {
-        const saved = await handleSave();
-        if (!saved) {
+        const canvas = await html2canvas(quotationRef.current!, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+          onclone: (clonedDoc: Document) => {
+            const clonedContainer = clonedDoc.querySelector('[data-quotation-container]');
+            if (clonedContainer) {
+              (clonedContainer as HTMLElement).style.transform = 'none';
+              (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+              (clonedContainer as HTMLElement).style.width = '210mm';
+              (clonedContainer as HTMLElement).style.height = '297mm';
+            }
+          }
+        });
+
+        const imageData = canvas.toDataURL('image/png', 1.0);
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+          setAlert({
+            type: 'error',
+            message: "Popup blocked! Please allow popups for this site to print."
+          });
+          setIsGeneratingPDF(false);
           return;
         }
-      } else if (shouldSave === null) {
-        return;
-      }
-    }
 
-    try {
-      setIsGeneratingPDF(true);
-      setAlert({
-        type: 'info',
-        message: 'Preparing print... Please wait.'
-      });
-
-      const canvas = await html2canvas(quotationRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        onclone: (clonedDoc: Document) => {
-          const clonedContainer = clonedDoc.querySelector('[data-quotation-container]');
-          if (clonedContainer) {
-            (clonedContainer as HTMLElement).style.transform = 'none';
-            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
-            (clonedContainer as HTMLElement).style.width = '210mm';
-            (clonedContainer as HTMLElement).style.height = '297mm';
-          }
-        }
-      });
-
-      const imageData = canvas.toDataURL('image/png', 1.0);
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        setAlert({
-          type: 'error',
-          message: "Popup blocked! Please allow popups for this site to print."
-        });
-        setIsGeneratingPDF(false);
-        return;
-      }
-
-      const printHtml = `
+        const printHtml = `
         <!DOCTYPE html>
         <html>
           <head>
@@ -801,22 +817,41 @@ const Quotation: React.FC = () => {
         </html>
       `;
 
-      printWindow.document.open();
-      printWindow.document.write(printHtml);
-      printWindow.document.close();
+        printWindow.document.open();
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
 
-      printWindow.focus();
+        printWindow.focus();
 
-      setIsGeneratingPDF(false);
+        setIsGeneratingPDF(false);
 
-    } catch (error) {
-      console.error('Error preparing print:', error);
-      setAlert({
-        type: 'error',
-        message: 'Failed to prepare print. Please try again.'
+      } catch (error) {
+        console.error('Error preparing print:', error);
+        setAlert({
+          type: 'error',
+          message: 'Failed to prepare print. Please try again.'
+        });
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!quotationData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Quotation",
+        message: "This quotation has not been saved yet. Do you want to save it now and then print?",
+        confirmText: "Save & Print",
+        onConfirm: async () => {
+          const saved = await handleSave();
+          if (saved) {
+            await proceedWithPrint();
+          }
+        }
       });
-      setIsGeneratingPDF(false);
+      return;
     }
+
+    await proceedWithPrint();
   };
 
   return (
@@ -832,6 +867,20 @@ const Quotation: React.FC = () => {
             duration={3000}
           />
         )}
+
+        <CustomConfirm
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmText={confirmConfig.confirmText}
+          cancelText={confirmConfig.cancelText}
+          type={confirmConfig.type}
+          onConfirm={() => {
+            confirmConfig.onConfirm();
+            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          }}
+          onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        />
 
         <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3">
@@ -851,7 +900,11 @@ const Quotation: React.FC = () => {
             <div className="flex flex-col">
               <h1 className="text-lg md:text-xl font-semibold text-gray-200">Quotation Management</h1>
               <div className="text-sm text-gray-400">
-                {viewMode === 'edit' ? 'Create and edit quotations' : 'View quotations'}
+                {viewMode === 'manage'
+                  ? 'View Quotations'
+                  : quotationData._id
+                    ? `Edit Quotation – ${quotationData.quotationId}`
+                    : 'Create New Quotation'}
               </div>
             </div>
           </div>
@@ -872,32 +925,11 @@ const Quotation: React.FC = () => {
               </div>
             )}
 
-            {viewMode === 'edit' && quotationData._id && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCancelEdit}
-                  title="Discard changes"
-                  className="px-3 py-1 rounded-md text-sm border border-red-500 text-red-400 hover:bg-red-600/10 transition"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={handleSaveChanges}
-                  disabled={isLoading || isGeneratingPDF || isSaving}
-                  className="flex items-center gap-1 px-3 py-1 rounded-md text-sm bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save Changes</span>
-                </button>
-              </div>
-            )}
-
             {viewMode === "edit" && (
               <button
                 onClick={handleOpenManageModal}
                 title="Manage quotations"
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-md text-sm"
+                className="flex items-center gap-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 px-3 py-1 rounded-md text-sm"
               >
                 <List className="w-4 h-4" />
                 <span>Manage Quotations</span>
@@ -933,7 +965,7 @@ const Quotation: React.FC = () => {
               <div className="bg-[#1e293b] rounded-lg w-full h-full flex flex-col border border-[#334155] shadow-2xl">
 
                 {/* Modal Body moved inline */}
-                <div className="flex-1 overflow-auto p-4 md:p-6">
+                <div className="flex-1 overflow-auto rounded-lg">
                   {isLoadingQuotations ? (
                     <div className="flex items-center justify-center h-64">
                       <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
@@ -948,39 +980,107 @@ const Quotation: React.FC = () => {
                     <>
                       {/* Table */}
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="bg-[#0f172a] border-b border-[#334155]">
-                              <th className="text-left p-3 md:p-4 text-sm font-semibold text-gray-300">Quotation ID</th>
-                              <th className="text-left p-3 md:p-4 text-sm font-semibold text-gray-300">Customer Name</th>
-                              <th className="text-left p-3 md:p-4 text-sm font-semibold text-gray-300">Issue Date</th>
-                              <th className="text-left p-3 md:p-4 text-sm font-semibold text-gray-300">Status</th>
-                              <th className="text-right p-3 md:p-4 text-sm font-semibold text-gray-300">Total Amount</th>
-                              <th className="text-center p-3 md:p-4 text-sm font-semibold text-gray-300">Actions</th>
+                        <table className="w-full border-collapse text-sm">
+                          {/* Sticky Header */}
+                          <thead className="sticky top-0 z-10">
+                            <tr className="bg-[#0b1220] border-b border-[#243244]">
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Quotation ID
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Customer
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Issue Date
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Status
+                              </th>
+                              <th className="text-right px-4 py-3 font-semibold text-gray-300">
+                                Total
+                              </th>
+                              <th className="text-center px-4 py-3 font-semibold text-gray-300">
+                                Actions
+                              </th>
                             </tr>
                           </thead>
+
                           <tbody>
                             {currentQuotations.map((quotation, idx) => {
-                              const stripe = idx % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#06121a]';
+                              const stripe =
+                                idx % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#08121d]';
+
                               const badge = getStatusBadge(quotation.status);
                               const customerDisplay = getCustomerDisplay(quotation.customer);
+
                               return (
-                                <tr key={quotation._id} className={`${stripe} border-b border-[#0f2436] hover:bg-[#082634]/70 transition`}>
-                                  <td className="p-3 md:p-4 text-sm text-gray-300 font-medium">{quotation.quotationId}</td>
-                                  <td className="p-3 md:p-4 text-sm text-gray-300 truncate max-w-[220px]" title={customerDisplay}>{customerDisplay || 'Unknown Customer'}</td>
-                                  <td className="p-3 md:p-4 text-sm text-gray-400">{formatDate(quotation.issueDate)}</td>
-                                  <td className="p-3 md:p-4">
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${badge.cls}`}>
+                                <tr
+                                  key={quotation._id}
+                                  className={`${stripe} border-b border-[#162235] hover:bg-[#0b2a3a]/60 transition-colors`}
+                                >
+                                  {/* Quotation ID */}
+                                  <td className="px-4 py-3 font-medium text-gray-200">
+                                    {quotation.quotationId}
+                                  </td>
+
+                                  {/* Customer */}
+                                  <td
+                                    className="px-4 py-3 text-gray-300 truncate max-w-[260px]"
+                                    title={customerDisplay}
+                                  >
+                                    {customerDisplay || 'Unknown Customer'}
+                                  </td>
+
+                                  {/* Date */}
+                                  <td className="px-4 py-3 text-gray-400">
+                                    {formatDate(quotation.issueDate)}
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${badge.cls}`}
+                                    >
                                       {badge.icon}
                                       {quotation.status}
                                     </span>
                                   </td>
-                                  <td className="p-3 md:p-4 text-sm text-green-400 font-semibold text-right">LKR {quotation.totalAmount.toFixed(2)}</td>
-                                  <td className="p-3 md:p-4">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button onClick={() => handleLoadQuotation(quotation, 'view')} className="p-2 hover:bg-blue-500/20 rounded-lg transition text-blue-400" title="View quotation" aria-label="View quotation"><Eye className="w-4 h-4" /></button>
-                                      <button onClick={() => handleLoadQuotation(quotation, 'edit')} className="p-2 hover:bg-green-500/20 rounded-lg transition text-green-400" title="Edit quotation" aria-label="Edit quotation"><Edit className="w-4 h-4" /></button>
-                                      <button onClick={() => { if (quotation._id && quotation.quotationId) handleDeleteQuotation(quotation._id, quotation.quotationId); }} className="p-2 hover:bg-red-500/20 rounded-lg transition text-red-400" title="Delete quotation" aria-label="Delete quotation"><Trash2 className="w-4 h-4" /></button>
+
+                                  {/* Amount */}
+                                  <td className="px-4 py-3 text-right font-semibold text-green-400">
+                                    LKR {quotation.totalAmount.toFixed(2)}
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        onClick={() => handleLoadQuotation(quotation, 'view')}
+                                        title="View"
+                                        className="p-2 rounded-md text-blue-400 hover:bg-blue-500/20 transition"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleLoadQuotation(quotation, 'edit')}
+                                        title="Edit"
+                                        className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => {
+                                          if (quotation._id && quotation.quotationId) {
+                                            handleDeleteQuotation(quotation._id, quotation.quotationId);
+                                          }
+                                        }}
+                                        title="Delete"
+                                        className="p-2 rounded-md text-red-400 hover:bg-red-500/20 transition"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
@@ -1023,7 +1123,7 @@ const Quotation: React.FC = () => {
               {/* Left Panel - Form */}
               <div className={`${isMobileView
                 ? (activePanel === 'form' ? 'w-full' : 'hidden')
-                : 'w-full lg:w-1/2'} overflow-y-auto`}
+                : 'w-full lg:w-1/2'} overflow-y-auto p-4`}
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center h-full">
@@ -1049,15 +1149,51 @@ const Quotation: React.FC = () => {
                 ref={rightPanelRef}
                 className={`${isMobileView
                   ? (activePanel === 'preview' ? 'w-full' : 'hidden')
-                  : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
+                  : 'hidden lg:flex lg:w-1/2'}
+                  flex flex-col overflow-hidden`}
               >
-                {/* Header with controls */}
-                <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                    <h2 className="text-base md:text-lg font-semibold text-gray-800">Quotation Preview</h2>
-                    <div className="flex items-center justify-end sm:justify-start gap-2">
+
+                {/* Canvas Container */}
+                <div
+                  ref={containerRef}
+                  className="flex-1 overflow-hidden bg-[#0F172A] flex items-center justify-center p-1 md:p-2"
+                >
+                  <div
+                    ref={quotationRef}
+                    data-quotation-container="true"
+                    style={{
+                      transform: `scale(${scale})`,
+                      transformOrigin: 'center',
+                      width: '210mm',
+                      minHeight: '297mm',
+                      transition: 'transform 0.15s ease-out',
+                      boxShadow: isMobileView
+                        ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
+                        : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                      backgroundColor: 'white'
+                    }}
+                  >
+                    <ErrorBoundary>
+                      <QuotationCanvas quotationData={quotationData} />
+                    </ErrorBoundary>
+                  </div>
+                </div>
+
+                <div className="bg-[#0F172A] p-3 md:p-4 flex-shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:justify-end sm:items-center gap-2">
+                    <div className="flex items-center mb-3 me-3 justify-end gap-2">
+                      {isDirty && (
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-red-500 text-white px-3 py-1.5 rounded-md hover:bg-red-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </button>
+                      )}
                       <button
-                        onClick={handleSave}
+                        onClick={handleSaveChanges}
                         disabled={isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -1098,38 +1234,11 @@ const Quotation: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Canvas Container */}
-                <div
-                  ref={containerRef}
-                  className="flex-1 overflow-hidden bg-white flex items-center justify-center p-1 md:p-2"
-                >
-                  <div
-                    ref={quotationRef}
-                    data-quotation-container="true"
-                    style={{
-                      transform: `scale(${scale})`,
-                      transformOrigin: 'center',
-                      width: '210mm',
-                      minHeight: '297mm',
-                      transition: 'transform 0.15s ease-out',
-                      boxShadow: isMobileView
-                        ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
-                        : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                      backgroundColor: 'white'
-                    }}
-                  >
-                    <ErrorBoundary>
-                      <QuotationCanvas quotationData={quotationData} />
-                    </ErrorBoundary>
-                  </div>
-                </div>
               </div>
             </>
           )}
         </div>
       </div>
-
-
     </div>
   );
 };
