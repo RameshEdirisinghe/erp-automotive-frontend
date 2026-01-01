@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import type { QuotationData } from "../types/quotation";
-import QuotationTemplate from "../assets/Business Quotation Template.jpg";
+import type { QuotationData } from "../../types/quotation";
+import QuotationTemplate from "../../assets/Business Quotation Template.jpg";
+
+
 
 interface QuotationCanvasProps {
   quotationData: QuotationData;
