@@ -6,12 +6,12 @@ export interface VehicleInfo {
 }
 
 export interface InventoryItem {
+  _id: string;
   id: string;
   product_name: string;
   product_code: string;
   quantity: number;
   sold_count: number;
-  discount_rate?: number;
   status: 'in_stock' | 'out_of_stock' | 'discontinued';
   vehicle: VehicleInfo;
   purchase_price: number;
@@ -19,6 +19,9 @@ export interface InventoryItem {
   shipment_code: string;
   created_at: string;
   updated_at: string;
+  __v?: number;
+  discount_rate?: number;
+  actual_sold_price?: number
 }
 
 export interface CreateInventoryItemData {
@@ -36,10 +39,11 @@ export interface UpdateInventoryItemData {
   product_code?: string;
   quantity?: number;
   status?: 'in_stock' | 'out_of_stock' | 'discontinued';
-  vehicle?: VehicleInfo;
+  vehicle?: Partial<VehicleInfo>;
   purchase_price?: number;
   sell_price?: number;
   shipment_code?: string;
+  discount_rate?: number;
 }
 
 export interface InventoryStats {
