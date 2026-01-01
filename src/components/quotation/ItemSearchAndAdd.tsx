@@ -137,7 +137,7 @@ export const ItemSearchAndAdd: React.FC<ItemSearchAndAddProps> = ({
         {newItem.itemName && (
           <SelectedItemPreview
             itemName={newItem.itemName}
-            unitPrice={newItem.unitPrice}
+            unitPrice={Number(newItem.unitPrice)}
             stockWarning={stockWarning}
             onClearSelection={onClearSelection}
           />
