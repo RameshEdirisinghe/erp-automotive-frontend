@@ -486,9 +486,7 @@ const Quotation: React.FC = () => {
     lastSavedAtRef.current = new Date().toISOString();
 
     setViewMode('edit');
-    if (isMobileView) {
-      setActivePanel('form');
-    }
+    setActivePanel(mode === 'view' ? 'preview' : 'form');
   };
 
   const handleDeleteQuotation = async (quotationId: string, quotationNumber: string) => {
