@@ -1,12 +1,32 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, FileText, Download, Printer, Menu, X, Save } from "lucide-react";
+import {
+  User,
+  FileText,
+  Download,
+  Printer,
+  Menu,
+  X,
+  Save,
+  List,
+  Eye,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  CheckCircle,
+  XCircle,
+  Clock,
+} from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type {
   InvoiceData,
   InvoiceItem,
   BackendInvoiceData,
+  PaymentStatusType,
+  PaymentMethodType
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
@@ -17,40 +37,48 @@ import jsPDF from "jspdf";
 import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
-
-const TAX_RATE = 0.18;
-const A4_WIDTH_MM = 210;
-const A4_HEIGHT_MM = 297;
-const PX_PER_MM = 3.78;
-
-const calculateInvoiceTotals = (items: InvoiceItem[], discountPercentage: number) => {
-  const subTotal = items.reduce((sum, current) => sum + current.total, 0);
-  const discount = subTotal * (discountPercentage / 100);
-  const tax = subTotal * TAX_RATE;
-  const totalAmount = Math.max(subTotal + tax - discount, 0);
-
-  return {
-    subTotal,
-    discount,
-    totalAmount,
-  };
-};
+import CustomConfirm from "../components/CustomConfirm";
 
 const Invoice: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [activePanel, setActivePanel] = useState<'form' | 'preview'>('form');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.7);
+  const [scale, setScale] = useState(0.85);
   const containerRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
-  const [invoiceData, setInvoiceData] = useState<InvoiceData>({
+  const [isDirty, setIsDirty] = useState(false);
+  const lastSavedRef = useRef<InvoiceData | null>(null);
+  const lastSavedAtRef = useRef<string | null>(null);
+
+  const [viewMode, setViewMode] = useState<'edit' | 'manage'>('edit');
+  const [allInvoices, setAllInvoices] = useState<BackendInvoiceData[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [manageSearch, setManageSearch] = useState("");
+
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "warning" | "danger" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: "",
+    onConfirm: () => { },
+  });
+
+  const getInitialInvoiceData = (): InvoiceData => ({
     invoiceId: "",
     customer: "",
     customerDetails: undefined,
@@ -66,6 +94,8 @@ const Invoice: React.FC = () => {
     vehicleNumber: "",
     notes: "",
   });
+
+  const [invoiceData, setInvoiceData] = useState<InvoiceData>(getInitialInvoiceData());
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -84,37 +114,25 @@ const Invoice: React.FC = () => {
 
   useEffect(() => {
     const calculateInitialScale = () => {
-      if (!rightPanelRef.current || isMobileView) return;
+      if (rightPanelRef.current && !isMobileView) {
+        const panelWidth = rightPanelRef.current.clientWidth;
+        const panelHeight = rightPanelRef.current.clientHeight;
+        const a4Width = 210 * 3.78;
+        const a4Height = 297 * 3.78;
 
-      const panelWidth = rightPanelRef.current.clientWidth;
-      const panelHeight = rightPanelRef.current.clientHeight;
+        const availableWidth = panelWidth - (isMobileView ? 24 : 48);
+        const availableHeight = panelHeight - (isMobileView ? 100 : 120);
 
-      const a4Width = A4_WIDTH_MM * PX_PER_MM;
-      const a4Height = A4_HEIGHT_MM * PX_PER_MM;
+        const widthScale = availableWidth / a4Width;
+        const heightScale = availableHeight / a4Height;
 
-      const availableWidth = panelWidth - 48;
-      const availableHeight = panelHeight - 120;
-
-      const widthScale = availableWidth / a4Width;
-      const heightScale = availableHeight / a4Height;
-
-      const newScale = Math.max(
-        Math.min(widthScale, heightScale),
-        0.3
-      );
-
-      setScale(prev => {
-        if (Math.abs(prev - newScale) < 0.01) {
-          return prev;
-        }
-        return newScale;
-      });
+        const calculatedScale = Math.min(widthScale, heightScale);
+        setScale(Math.max(calculatedScale, isMobileView ? 0.3 : 0.5));
+      }
     };
 
     calculateInitialScale();
-
     const resizeObserver = new ResizeObserver(calculateInitialScale);
-
     if (rightPanelRef.current) {
       resizeObserver.observe(rightPanelRef.current);
     }
@@ -122,381 +140,438 @@ const Invoice: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, [isMobileView]);
 
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+
+      const items = await inventoryService.getAll();
+      setInventoryItems(items as InvoiceInventoryItem[]);
+
+      const nextId = await invoiceService.getNextId();
+      setInvoiceData({
+        ...getInitialInvoiceData(),
+        invoiceId: nextId
+      });
+      lastSavedRef.current = null;
+      setIsDirty(false);
+      lastSavedAtRef.current = null;
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to load data'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        console.log('[DEBUG] Loading inventory items...');
-
-        const items = await inventoryService.getAll();
-        console.log('[DEBUG] Inventory items loaded:', items);
-        setInventoryItems(items as InvoiceInventoryItem[]);
-
-        const nextId = await invoiceService.getNextId();
-        console.log('[DEBUG] Next invoice ID:', nextId);
-        setInvoiceData(prev => ({ ...prev, invoiceId: nextId }));
-
-      } catch (error) {
-        console.error('[DEBUG] Error loading data:', error);
-        setAlert({
-          type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to load data'
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
+    loadInitialData();
   }, []);
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
-    console.log('[DEBUG] Adding item:', item);
-    setInvoiceData(prev => {
-      const existingItemIndex = prev.items.findIndex(
-        existing => existing.item === item.item
-      );
+    const total = item.quantity * item.unitPrice;
 
-      let updatedItems: InvoiceItem[];
+    const existingItemIndex = invoiceData.items.findIndex(
+      existing => existing.item === item.item
+    );
 
-      if (existingItemIndex !== -1) {
-        const existingItem = prev.items[existingItemIndex];
-        const mergedItem: InvoiceItem = {
-          ...existingItem,
-          quantity: existingItem.quantity + item.quantity,
-          total: (existingItem.quantity + item.quantity) * existingItem.unitPrice,
-        };
+    let newItems;
 
-        updatedItems = prev.items.map((entry, index) =>
-          index === existingItemIndex ? mergedItem : entry
-        );
-      } else {
-        const newItem: InvoiceItem = {
-          ...item,
-          id: Date.now().toString(),
-          total: item.quantity * item.unitPrice,
-        };
-        updatedItems = [...prev.items, newItem];
-      }
-
-      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
-
-      console.log('[DEBUG] Updated items after add:', updatedItems);
-      console.log('[DEBUG] Updated totals:', totals);
-
-      return {
-        ...prev,
-        items: updatedItems,
-        ...totals,
+    if (existingItemIndex !== -1) {
+      newItems = [...invoiceData.items];
+      const existingItem = newItems[existingItemIndex];
+      const updatedItem = {
+        ...existingItem,
+        quantity: existingItem.quantity + item.quantity,
+        total: (existingItem.quantity + item.quantity) * existingItem.unitPrice
       };
-    });
+      newItems[existingItemIndex] = updatedItem;
+    } else {
+      const newItem: InvoiceItem = {
+        ...item,
+        id: Date.now().toString(),
+        total
+      };
+      newItems = [...invoiceData.items, newItem];
+    }
+
+    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
+    const taxAmount = subTotal * 0.18;
+    const totalAmount = subTotal + taxAmount - discountAmount;
+
+    setInvoiceData(prev => ({
+      ...prev,
+      items: newItems,
+      subTotal,
+      discount: discountAmount,
+      totalAmount: totalAmount > 0 ? totalAmount : 0
+    }));
+    setIsDirty(true);
+  };
+
+  const handleCancelEdit = async () => {
+    if (invoiceData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Discard Changes",
+        message: "Are you sure you want to discard changes? You will lose any unsaved modifications.",
+        confirmText: "Discard",
+        type: "danger",
+        onConfirm: async () => {
+          await loadInitialData();
+          setViewMode('manage');
+        }
+      });
+    } else {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Clear Invoice",
+        message: "Are you sure you want to clear this invoice? All unsaved changes will be lost.",
+        confirmText: "Clear",
+        type: "danger",
+        onConfirm: async () => {
+          await loadInitialData();
+          setAlert({ type: 'success', message: 'Invoice cleared' });
+        }
+      });
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    const saved = await handleSave();
+    if (saved) {
+      lastSavedRef.current = { ...invoiceData };
+    }
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
+    return {
+      invoiceId: data.invoiceId,
+      customer: data.customer,
+      items: data.items.map(item => ({
+        item: item.item,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      })),
+      subTotal: data.subTotal,
+      discount: data.discount,
+      totalAmount: data.totalAmount,
+      paymentMethod: data.paymentMethod,
+      paymentStatus: data.paymentStatus,
+      bankDepositDate: data.bankDepositDate,
+      issueDate: data.issueDate,
+      dueDate: data.dueDate,
+      vehicleNumber: data.vehicleNumber,
+      notes: data.notes,
+    };
   };
 
   const handleRemoveItem = (id: string) => {
-    console.log('[DEBUG] Removing item with id:', id);
-    setInvoiceData(prev => {
-      const updatedItems = prev.items.filter(item => item.id !== id);
-      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
+    const newItems = invoiceData.items.filter(item => item.id !== id);
+    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
+    const taxAmount = subTotal * 0.18;
+    const totalAmount = subTotal + taxAmount - discountAmount;
 
-      return {
-        ...prev,
-        items: updatedItems,
-        ...totals,
-      };
-    });
+    setInvoiceData(prev => ({
+      ...prev,
+      items: newItems,
+      subTotal,
+      discount: discountAmount,
+      totalAmount: totalAmount > 0 ? totalAmount : 0
+    }));
+    setIsDirty(true);
   };
 
   const handleUpdateItem = (id: string, updates: Partial<InvoiceItem>) => {
-    console.log('[DEBUG] Updating item:', id, updates);
-    setInvoiceData(prev => {
-      const updatedItems = prev.items.map(item => {
-        if (item.id !== id) {
-          return item;
+    const newItems = invoiceData.items.map(item => {
+      if (item.id === id) {
+        const updatedItem = { ...item, ...updates };
+        if (updates.quantity !== undefined || updates.unitPrice !== undefined) {
+          updatedItem.total = updatedItem.quantity * updatedItem.unitPrice;
         }
-
-        const quantity = updates.quantity ?? item.quantity;
-        const unitPrice = updates.unitPrice ?? item.unitPrice;
-
-        return {
-          ...item,
-          ...updates,
-          quantity,
-          unitPrice,
-          total: quantity * unitPrice,
-        };
-      });
-
-      const totals = calculateInvoiceTotals(updatedItems, prev.discountPercentage);
-
-      return {
-        ...prev,
-        items: updatedItems,
-        ...totals,
-      };
+        return updatedItem;
+      }
+      return item;
     });
+
+    const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+    const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
+    const taxAmount = subTotal * 0.18;
+    const totalAmount = subTotal + taxAmount - discountAmount;
+
+    setInvoiceData(prev => ({
+      ...prev,
+      items: newItems,
+      subTotal,
+      discount: discountAmount,
+      totalAmount: totalAmount > 0 ? totalAmount : 0
+    }));
+    setIsDirty(true);
   };
 
   const handleFieldChange = (field: keyof InvoiceData, value: string | number | boolean | Date) => {
-    console.log('[DEBUG] Field change:', field, value);
     setInvoiceData(prev => {
-      if (field === 'discountPercentage') {
-        const numericValue = typeof value === 'number' ? value : Number(value);
-        const discountPercentage = Number.isNaN(numericValue) ? 0 : numericValue;
-        const totals = calculateInvoiceTotals(prev.items, discountPercentage);
+      const updated = { ...prev, [field]: value };
 
+      if (field === 'discountPercentage') {
+        const discountAmount = prev.subTotal * (Number(value) / 100);
+        const taxAmount = prev.subTotal * 0.18;
+        const totalAmount = prev.subTotal + taxAmount - discountAmount;
         return {
-          ...prev,
-          discountPercentage,
-          ...totals,
+          ...updated,
+          discount: discountAmount,
+          totalAmount: totalAmount > 0 ? totalAmount : 0
         };
       }
 
-      return {
-        ...prev,
-        [field]: value,
-      };
+      return updated;
     });
+    setIsDirty(true);
   };
 
   const handleCustomerIdChange = (customerId: string, customerDetails?: any) => {
-    console.log('[DEBUG] Customer changed:', { customerId, customerDetails });
     setInvoiceData(prev => ({
       ...prev,
       customer: customerId,
       customerDetails: customerDetails
     }));
+    setIsDirty(true);
   };
 
-  // Helper function to validate data
-  const validateInvoiceData = (): string[] => {
-    const errors: string[] = [];
-
-    console.log('[DEBUG] Validating invoice data:', invoiceData);
-
-    // Check customer
-    if (!invoiceData.customer) {
-      errors.push('Customer ID is required');
-      console.error('[DEBUG] Validation error: No customer ID');
-    } else if (typeof invoiceData.customer !== 'string') {
-      errors.push('Customer ID must be a string');
-      console.error('[DEBUG] Validation error: Customer ID is not a string', invoiceData.customer);
-    }
-
-    // Check customer details
-    if (!invoiceData.customerDetails) {
-      console.warn('[DEBUG] Customer details not found, but continuing...');
-    }
-
-    // Check items
-    if (invoiceData.items.length === 0) {
-      errors.push('At least one item is required');
-      console.error('[DEBUG] Validation error: No items');
-    } else {
-      invoiceData.items.forEach((item, index) => {
-        console.log(`[DEBUG] Validating item ${index + 1}:`, item);
-        
-        if (!item.item) {
-          errors.push(`Item ${index + 1}: Missing inventory item ID`);
-          console.error(`[DEBUG] Validation error: Item ${index + 1} missing ID`);
-        }
-        
-        if (typeof item.quantity !== 'number' || item.quantity <= 0) {
-          errors.push(`Item ${index + 1}: Quantity must be greater than 0`);
-          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid quantity`, item.quantity);
-        }
-        
-        if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
-          errors.push(`Item ${index + 1}: Unit price must be valid`);
-          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid unit price`, item.unitPrice);
-        }
-        
-        if (typeof item.total !== 'number' || item.total < 0) {
-          errors.push(`Item ${index + 1}: Total must be valid`);
-          console.error(`[DEBUG] Validation error: Item ${index + 1} invalid total`, item.total);
-        }
-      });
-    }
-
-    // Check vehicle number
-    if (!invoiceData.vehicleNumber || invoiceData.vehicleNumber.trim().length === 0) {
-      errors.push('Vehicle number is required');
-      console.error('[DEBUG] Validation error: No vehicle number');
-    }
-
-    // Check dates
-    if (!invoiceData.issueDate) {
-      errors.push('Issue date is required');
-      console.error('[DEBUG] Validation error: No issue date');
-    }
-    
-    if (!invoiceData.dueDate) {
-      errors.push('Due date is required');
-      console.error('[DEBUG] Validation error: No due date');
-    }
-
-    // Check payment method and status
-    if (!invoiceData.paymentMethod) {
-      errors.push('Payment method is required');
-      console.error('[DEBUG] Validation error: No payment method');
-    }
-    
-    if (!invoiceData.paymentStatus) {
-      errors.push('Payment status is required');
-      console.error('[DEBUG] Validation error: No payment status');
-    }
-
-    return errors;
-  };
-
-  // Save invoice to database
-  const handleSaveInvoice = async () => {
-    console.log('[DEBUG] Save button clicked');
-    console.log('[DEBUG] Current invoice data:', invoiceData);
-
-    // Validate data first
-    const validationErrors = validateInvoiceData();
-    if (validationErrors.length > 0) {
-      console.error('[DEBUG] Validation failed with errors:', validationErrors);
+  const handleSave = async () => {
+    if (!invoiceData.customer || invoiceData.items.length === 0) {
       setAlert({
         type: 'error',
-        message: `Please fix the following errors:\n• ${validationErrors.join('\n• ')}`
+        message: 'Please add customer and at least one item before saving'
       });
-      return;
+      return false;
     }
 
     try {
       setIsSaving(true);
-      setAlert({
-        type: 'info',
-        message: 'Saving invoice...'
-      });
 
-      console.log('[DEBUG] Preparing backend data...');
+      const backendData = prepareInvoiceForSave(invoiceData);
+      console.log(backendData);
 
-      // Prepare data for backend with proper formatting
-      const backendData: BackendInvoiceData = {
-        invoiceId: invoiceData.invoiceId,
-        customer: invoiceData.customer,
-        items: invoiceData.items.map(item => ({
-          item: item.item,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total
-        })),
-        subTotal: invoiceData.subTotal,
-        discount: invoiceData.discount,
-        totalAmount: invoiceData.totalAmount,
-        paymentStatus: invoiceData.paymentStatus,
-        paymentMethod: invoiceData.paymentMethod,
-        bankDepositDate: invoiceData.bankDepositDate ? invoiceData.bankDepositDate : undefined,
-        issueDate: invoiceData.issueDate,
-        dueDate: invoiceData.dueDate,
-        vehicleNumber: invoiceData.vehicleNumber,
-        notes: invoiceData.notes || ''
-      };
+      if (invoiceData._id) {
+        setAlert({
+          type: 'info',
+          message: 'Updating invoice...'
+        });
 
-      console.log('[DEBUG] Backend data prepared:', backendData);
-      console.log('[DEBUG] Data types:', {
-        customer: typeof backendData.customer,
-        customerValue: backendData.customer,
-        itemsCount: backendData.items.length,
-        items: backendData.items.map(item => ({
-          itemType: typeof item.item,
-          itemValue: item.item,
-          quantityType: typeof item.quantity,
-          unitPriceType: typeof item.unitPrice,
-          totalType: typeof item.total
-        })),
-        issueDateType: typeof backendData.issueDate,
-        dueDateType: typeof backendData.dueDate,
-        bankDepositDateType: typeof backendData.bankDepositDate
-      });
+        await invoiceService.update(invoiceData._id, backendData);
 
-      console.log('[DEBUG] Calling invoiceService.create()...');
-      
-      // Call the service to save invoice
-      const savedInvoice = await invoiceService.create(backendData);
-      
-      console.log('[DEBUG] Invoice saved successfully:', savedInvoice);
-      
-      // Update local state with the saved invoice ID
-      setInvoiceData(prev => ({
-        ...prev,
-        _id: savedInvoice._id,
-        invoiceId: savedInvoice.invoiceId
-      }));
+        setAlert({
+          type: 'success',
+          message: 'Invoice updated successfully!'
+        });
+        lastSavedRef.current = { ...invoiceData };
+        setIsDirty(false);
+        lastSavedAtRef.current = new Date().toISOString();
+      } else {
+        setAlert({
+          type: 'info',
+          message: 'Saving invoice...'
+        });
 
-      setAlert({
-        type: 'success',
-        message: `Invoice saved successfully! Invoice ID: ${savedInvoice.invoiceId}`
-      });
+        const response = await invoiceService.create(backendData);
 
-      console.log('[DEBUG] Getting next invoice ID for new invoice...');
-      
-      // Refresh the next invoice ID for next invoice
-      const nextId = await invoiceService.getNextId();
-      
-      // Reset form for next invoice but keep customer if they want to create another
-      setInvoiceData(prev => ({ 
-        ...prev,
-        _id: undefined,
-        invoiceId: nextId,
-        items: [],
-        subTotal: 0,
-        discount: 0,
-        discountPercentage: 0,
-        totalAmount: 0,
-        vehicleNumber: "",
-        notes: "",
-        // Keep customer and customerDetails for convenience
-      }));
+        setInvoiceData(prev => ({
+          ...prev,
+          _id: response._id
+        }));
 
-      console.log('[DEBUG] Form reset for new invoice. Next ID:', nextId);
+        setAlert({
+          type: 'success',
+          message: 'Invoice saved successfully!'
+        });
+        lastSavedRef.current = { ...invoiceData, _id: response._id } as InvoiceData;
+        setIsDirty(false);
+        lastSavedAtRef.current = new Date().toISOString();
+      }
 
+      return true;
     } catch (error) {
-      console.error('[DEBUG] Error saving invoice:', error);
-      
-      // Detailed error logging
-      if (error instanceof Error) {
-        console.error('[DEBUG] Error name:', error.name);
-        console.error('[DEBUG] Error message:', error.message);
-        console.error('[DEBUG] Error stack:', error.stack);
-        
-        // Try to extract more information if it's an HTTP error
-        if (error.message.includes('400')) {
-          console.error('[DEBUG] HTTP 400 Bad Request - Likely validation error');
-          console.error('[DEBUG] Please check:');
-          console.error('[DEBUG] 1. Customer ID format (should be MongoDB ObjectId)');
-          console.error('[DEBUG] 2. Item IDs format (should be MongoDB ObjectId)');
-          console.error('[DEBUG] 3. Date formats');
-          console.error('[DEBUG] 4. Required fields are not empty');
-        }
-      }
-
-      // User-friendly error message
-      let errorMessage = 'Failed to save invoice. Please try again.';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('400')) {
-          errorMessage = 'Validation error: Please check all required fields are filled correctly.';
-        } else if (error.message.includes('401') || error.message.includes('403')) {
-          errorMessage = 'Authentication error. Please log in again.';
-        } else if (error.message.includes('Network Error')) {
-          errorMessage = 'Network error. Please check your connection.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-
+      console.error('Error saving invoice:', error);
       setAlert({
         type: 'error',
-        message: errorMessage
+        message: error instanceof Error ? error.message : 'Failed to save invoice'
       });
+      return false;
     } finally {
       setIsSaving(false);
-      console.log('[DEBUG] Save operation completed');
     }
+  };
+
+  const fetchAllInvoices = async () => {
+    try {
+      setIsLoadingInvoices(true);
+      const invoices = await invoiceService.getAll();
+      const normalized = (invoices || []).map((q: any) => ({
+        ...q,
+        customer: q?.customer && typeof q.customer === 'object' ? (q.customer._id || q.customer.id || q.customer) : q.customer,
+      })) as BackendInvoiceData[];
+      setAllInvoices(normalized);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      setAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to load invoices'
+      });
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  };
+
+  const handleLoadInvoice = (invoice: any, mode: 'view' | 'edit') => {
+    const mappedItems: InvoiceItem[] = invoice.items.map((item: any, index: number) => ({
+      id: (Date.now() + index).toString(),
+      item: item.item._id || item.item,
+      itemName: item.item.product_name || item.itemName || 'Unknown Item',
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total
+    }));
+
+    const discountPercentage = invoice.subTotal > 0
+      ? (invoice.discount / invoice.subTotal) * 100
+      : 0;
+
+    setInvoiceData({
+      _id: invoice._id,
+      invoiceId: invoice.invoiceId,
+      customer: invoice.customer._id || invoice.customer,
+      customerDetails: invoice.customer,
+      items: mappedItems,
+      subTotal: invoice.subTotal,
+      discount: invoice.discount,
+      discountPercentage: discountPercentage,
+      totalAmount: invoice.totalAmount,
+      paymentMethod: invoice.paymentMethod,
+      paymentStatus: invoice.paymentStatus,
+      bankDepositDate: invoice.bankDepositDate?.split('T')[0],
+      issueDate: invoice.issueDate.split('T')[0],
+      dueDate: invoice.dueDate.split('T')[0],
+      vehicleNumber: invoice.vehicleNumber || '',
+      notes: invoice.notes || '',
+    });
+
+    lastSavedRef.current = {
+      _id: invoice._id,
+      invoiceId: invoice.invoiceId,
+      customer: invoice.customer._id || invoice.customer,
+      customerDetails: invoice.customer,
+      items: mappedItems,
+      subTotal: invoice.subTotal,
+      discount: invoice.discount,
+      discountPercentage: discountPercentage,
+      totalAmount: invoice.totalAmount,
+      paymentMethod: invoice.paymentMethod,
+      paymentStatus: invoice.paymentStatus,
+      bankDepositDate: invoice.bankDepositDate?.split('T')[0],
+      issueDate: invoice.issueDate.split('T')[0],
+      dueDate: invoice.dueDate.split('T')[0],
+      vehicleNumber: invoice.vehicleNumber || '',
+      notes: invoice.notes || '',
+    } as InvoiceData;
+    setIsDirty(false);
+    lastSavedAtRef.current = new Date().toISOString();
+
+    setViewMode('edit');
+    setActivePanel(mode === 'view' ? 'preview' : 'form');
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Invoice",
+      message: `Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await invoiceService.delete(invoiceId);
+          setAlert({
+            type: 'success',
+            message: `Invoice ${invoiceNumber} deleted successfully`
+          });
+          fetchAllInvoices();
+        } catch (error) {
+          console.error('Error deleting invoice:', error);
+          setAlert({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Failed to delete invoice'
+          });
+        }
+      }
+    });
+  };
+
+  const handleOpenManageModal = () => {
+    setViewMode('manage');
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    if (viewMode === 'manage') {
+      fetchAllInvoices();
+    }
+  }, [viewMode]);
+
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const getCustomerDisplay = (customer: any) => {
+    if (!customer) return '';
+    if (typeof customer === 'object') return String(customer.fullName || customer.name || '');
+    return String(customer);
+  };
+
+  const filteredInvoices = manageSearch.trim()
+    ? allInvoices.filter(q => {
+      const idMatch = String(q.invoiceId).toLowerCase().includes(manageSearch.toLowerCase());
+      const customerDisplay = getCustomerDisplay(q.customer);
+      const customerMatch = customerDisplay.toLowerCase().includes(manageSearch.toLowerCase());
+      return idMatch || customerMatch;
+    })
+    : allInvoices;
+  const filteredTotalPages = Math.max(1, Math.ceil(filteredInvoices.length / itemsPerPage));
+  const currentInvoices = filteredInvoices.slice(startIndex, Math.min(endIndex, filteredInvoices.length));
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    const colors: Record<string, { cls: string; icon?: React.ReactNode }> = {
+      'PENDING': { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', icon: <Clock className="w-3 h-3 mr-1" /> },
+      'COMPLETED': { cls: 'bg-green-500/10 text-green-400 border-green-500/20', icon: <CheckCircle className="w-3 h-3 mr-1" /> },
+      'REJECTED': { cls: 'bg-red-500/10 text-red-400 border-red-500/20', icon: <XCircle className="w-3 h-3 mr-1" /> },
+    };
+    return colors[status] || colors['PENDING'];
   };
 
   const downloadPDF = async () => {
@@ -508,152 +583,172 @@ const Invoice: React.FC = () => {
       return;
     }
 
-    try {
-      setIsGeneratingPDF(true);
-      setAlert({
-        type: 'info',
-        message: 'Generating PDF... Please wait.'
-      });
-
-      const invoiceContainer = invoiceRef.current;
-
-      const originalTransform = invoiceContainer.style.transform;
-      const originalTransformOrigin = invoiceContainer.style.transformOrigin;
-      const originalWidth = invoiceContainer.style.width;
-      const originalHeight = invoiceContainer.style.height;
-
-      invoiceContainer.style.transform = 'none';
-      invoiceContainer.style.transformOrigin = 'top left';
-      invoiceContainer.style.width = '210mm';
-      invoiceContainer.style.height = '297mm';
-      invoiceContainer.style.position = 'fixed';
-      invoiceContainer.style.left = '0';
-      invoiceContainer.style.top = '0';
-      invoiceContainer.style.zIndex = '9999';
-
-      void invoiceContainer.offsetHeight;
-
-      const images = invoiceContainer.getElementsByTagName('img');
-      const imageLoadPromises = Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
+    const proceedWithDownload = async () => {
+      try {
+        setIsGeneratingPDF(true);
+        setAlert({
+          type: 'info',
+          message: 'Generating PDF... Please wait.'
         });
-      });
 
-      await Promise.all(imageLoadPromises);
+        const invoiceContainer = invoiceRef.current!;
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+        const originalTransform = invoiceContainer.style.transform;
+        const originalTransformOrigin = invoiceContainer.style.transformOrigin;
+        const originalWidth = invoiceContainer.style.width;
+        const originalHeight = invoiceContainer.style.height;
 
-      const canvas = await html2canvas(invoiceContainer, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        onclone: (clonedDoc: Document) => {
-          const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
-          if (clonedContainer) {
-            (clonedContainer as HTMLElement).style.transform = 'none';
-            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
-            (clonedContainer as HTMLElement).style.width = '210mm';
-            (clonedContainer as HTMLElement).style.height = '297mm';
+        invoiceContainer.style.transform = 'none';
+        invoiceContainer.style.transformOrigin = 'top left';
+        invoiceContainer.style.width = '210mm';
+        invoiceContainer.style.height = '297mm';
+        invoiceContainer.style.position = 'fixed';
+        invoiceContainer.style.left = '0';
+        invoiceContainer.style.top = '0';
+        invoiceContainer.style.zIndex = '9999';
+
+        void invoiceContainer.offsetHeight;
+
+        const images = invoiceContainer.getElementsByTagName('img');
+        const imageLoadPromises = Array.from(images).map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        });
+
+        await Promise.all(imageLoadPromises);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const canvas = await html2canvas(invoiceContainer, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+          onclone: (clonedDoc: Document) => {
+            const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
+            if (clonedContainer) {
+              (clonedContainer as HTMLElement).style.transform = 'none';
+              (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+              (clonedContainer as HTMLElement).style.width = '210mm';
+              (clonedContainer as HTMLElement).style.height = '297mm';
+            }
+          }
+        });
+
+        invoiceContainer.style.transform = originalTransform;
+        invoiceContainer.style.transformOrigin = originalTransformOrigin;
+        invoiceContainer.style.width = originalWidth;
+        invoiceContainer.style.height = originalHeight;
+        invoiceContainer.style.position = '';
+        invoiceContainer.style.left = '';
+        invoiceContainer.style.top = '';
+        invoiceContainer.style.zIndex = '';
+
+        const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+
+        const imgWidth = pdfWidth;
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
+
+        const xPos = 0;
+        const yPos = 0;
+
+        pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
+        pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
+
+        setAlert({
+          type: 'success',
+          message: 'PDF downloaded successfully!'
+        });
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
+        });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!invoiceData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Invoice",
+        message: "This invoice has not been saved yet. Do you want to save it now and then download?",
+        confirmText: "Save & Download",
+        onConfirm: async () => {
+          const saved = await handleSave();
+          if (saved) {
+            await proceedWithDownload();
           }
         }
       });
-
-      invoiceContainer.style.transform = originalTransform;
-      invoiceContainer.style.transformOrigin = originalTransformOrigin;
-      invoiceContainer.style.width = originalWidth;
-      invoiceContainer.style.height = originalHeight;
-      invoiceContainer.style.position = '';
-      invoiceContainer.style.left = '';
-      invoiceContainer.style.top = '';
-      invoiceContainer.style.zIndex = '';
-
-      const jpegData = canvas.toDataURL('image/jpeg', 1.0);
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
-
-      const xPos = 0;
-      const yPos = 0;
-
-      pdf.addImage(jpegData, 'JPEG', xPos, yPos, imgWidth, finalHeight);
-
-      pdf.save(`invoice-${invoiceData.invoiceId}.pdf`);
-
-      setAlert({
-        type: 'success',
-        message: 'PDF downloaded successfully!'
-      });
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setAlert({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
-      });
-    } finally {
-      setIsGeneratingPDF(false);
+      return;
     }
+
+    await proceedWithDownload();
   };
 
   const handlePrint = async () => {
     if (!invoiceRef.current) return;
 
-    try {
-      setIsGeneratingPDF(true);
-      setAlert({
-        type: 'info',
-        message: 'Preparing print... Please wait.'
-      });
-
-      const canvas = await html2canvas(invoiceRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        onclone: (clonedDoc: Document) => {
-          const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
-          if (clonedContainer) {
-            (clonedContainer as HTMLElement).style.transform = 'none';
-            (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
-            (clonedContainer as HTMLElement).style.width = '210mm';
-            (clonedContainer as HTMLElement).style.height = '297mm';
-          }
-        }
-      });
-
-      const imageData = canvas.toDataURL('image/png', 1.0);
-
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
+    const proceedWithPrint = async () => {
+      try {
+        setIsGeneratingPDF(true);
         setAlert({
-          type: 'error',
-          message: "Popup blocked! Please allow popups for this site to print."
+          type: 'info',
+          message: 'Preparing print... Please wait.'
         });
-        setIsGeneratingPDF(false);
-        return;
-      }
 
-      const printHtml = `
+        const canvas = await html2canvas(invoiceRef.current!, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+          onclone: (clonedDoc: Document) => {
+            const clonedContainer = clonedDoc.querySelector('[data-invoice-container]');
+            if (clonedContainer) {
+              (clonedContainer as HTMLElement).style.transform = 'none';
+              (clonedContainer as HTMLElement).style.transformOrigin = 'top left';
+              (clonedContainer as HTMLElement).style.width = '210mm';
+              (clonedContainer as HTMLElement).style.height = '297mm';
+            }
+          }
+        });
+
+        const imageData = canvas.toDataURL('image/png', 1.0);
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+          setAlert({
+            type: 'error',
+            message: "Popup blocked! Please allow popups for this site to print."
+          });
+          setIsGeneratingPDF(false);
+          return;
+        }
+
+        const printHtml = `
         <!DOCTYPE html>
         <html>
           <head>
@@ -730,22 +825,41 @@ const Invoice: React.FC = () => {
         </html>
       `;
 
-      printWindow.document.open();
-      printWindow.document.write(printHtml);
-      printWindow.document.close();
+        printWindow.document.open();
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
 
-      printWindow.focus();
+        printWindow.focus();
 
-      setIsGeneratingPDF(false);
+        setIsGeneratingPDF(false);
 
-    } catch (error) {
-      console.error('Error preparing print:', error);
-      setAlert({
-        type: 'error',
-        message: 'Failed to prepare print. Please try again.'
+      } catch (error) {
+        console.error('Error preparing print:', error);
+        setAlert({
+          type: 'error',
+          message: 'Failed to prepare print. Please try again.'
+        });
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!invoiceData._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Invoice",
+        message: "This invoice has not been saved yet. Do you want to save it now and then print?",
+        confirmText: "Save & Print",
+        onConfirm: async () => {
+          const saved = await handleSave();
+          if (saved) {
+            await proceedWithPrint();
+          }
+        }
       });
-      setIsGeneratingPDF(false);
+      return;
     }
+
+    await proceedWithPrint();
   };
 
   return (
@@ -762,46 +876,81 @@ const Invoice: React.FC = () => {
           />
         )}
 
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 md:px-6 shadow-lg">
+        <CustomConfirm
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmText={confirmConfig.confirmText}
+          cancelText={confirmConfig.cancelText}
+          type={confirmConfig.type}
+          onConfirm={() => {
+            confirmConfig.onConfirm();
+            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          }}
+          onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        />
+
+        <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3">
-            {isMobileView && (
-              <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="p-2 rounded-lg hover:bg-[#0f172a] transition"
-              >
-                {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {viewMode === 'manage' ? (
+              <button onClick={() => setViewMode('edit')} className="p-2 rounded-lg hover:bg-[#15202b] transition">
+                <ChevronLeft className="w-5 h-5" />
               </button>
+            ) : (
+              isMobileView && (
+                <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-lg hover:bg-[#15202b] transition">
+                  {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+              )
             )}
+
             <FileText className="text-blue-400 w-5 h-5 md:w-6 md:h-6" />
-            <h1 className="text-lg md:text-xl font-semibold text-gray-200">Invoice Management</h1>
+            <div className="flex flex-col">
+              <h1 className="text-lg md:text-xl font-semibold text-gray-200">Invoice Management</h1>
+              <div className="text-sm text-gray-400">
+                {viewMode === 'manage'
+                  ? 'View Invoices'
+                  : invoiceData._id
+                    ? `Edit Invoice – ${invoiceData.invoiceId}`
+                    : 'Create New Invoice'}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
-            <div className="hidden sm:block text-sm text-gray-300 bg-[#0f172a] px-2 md:px-3 py-1 rounded border border-[#334155]">
-              Invoice ID: <span className="font-semibold">{invoiceData.invoiceId || 'Loading...'}</span>
-            </div>
-            
-            {/* Save Button */}
-            <button
-              onClick={handleSaveInvoice}
-              disabled={isLoading || isSaving || invoiceData.items.length === 0}
-              className="flex items-center gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
-            </button>
-            
-            <div className="bg-[#0f172a] border border-[#334155] p-1.5 md:p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
+            {viewMode === "manage" && (
+              <div className="relative">
+                <input
+                  value={manageSearch}
+                  onChange={(e) => {
+                    setManageSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search by ID or customer"
+                  className="pl-9 pr-3 py-2 rounded-md bg-[#061425] text-sm placeholder:text-gray-500 text-gray-200 border border-[#16324a] focus:outline-none focus:ring-1 focus:ring-blue-500 w-56"
+                />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+            )}
+
+            {viewMode === "edit" && (
+              <button
+                onClick={handleOpenManageModal}
+                title="Manage invoices"
+                className="flex items-center gap-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 px-3 py-1 rounded-md text-sm"
+              >
+                <List className="w-4 h-4" />
+                <span>Manage Invoices</span>
+              </button>
+            )}
+
+            <div className="bg-[#081226] border border-[#16324a] p-2 rounded-full cursor-pointer hover:bg-[#0b2434] transition">
               <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
             </div>
           </div>
         </div>
 
-        {isMobileView && (
+        {viewMode === 'edit' && isMobileView && (
           <div className="flex border-b border-[#334155] bg-[#1e293b]">
             <button
               onClick={() => setActivePanel('form')}
@@ -819,90 +968,283 @@ const Invoice: React.FC = () => {
         )}
 
         <div className="flex-1 flex overflow-hidden">
-          <div className={`${isMobileView
-            ? (activePanel === 'form' ? 'w-full' : 'hidden')
-            : 'w-full lg:w-1/2'} p-3 md:p-4 lg:p-6 overflow-y-auto`}
-          >
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-              </div>
-            ) : (
-              <ErrorBoundary>
-                <InvoiceForm
-                  invoiceData={invoiceData}
-                  onFieldChange={handleFieldChange}
-                  onCustomerIdChange={handleCustomerIdChange}
-                  onAddItem={handleAddItem}
-                  onRemoveItem={handleRemoveItem}
-                  onUpdateItem={handleUpdateItem}
-                  inventoryItems={inventoryItems}
-                />
-              </ErrorBoundary>
-            )}
-          </div>
+          {viewMode === 'manage' ? (
+            <div className="w-full overflow-auto p-4">
+              <div className="bg-[#1e293b] rounded-lg w-full h-full flex flex-col border border-[#334155] shadow-2xl">
 
-          <div
-            ref={rightPanelRef}
-            className={`${isMobileView
-              ? (activePanel === 'preview' ? 'w-full' : 'hidden')
-              : 'hidden lg:flex lg:w-1/2'} bg-gray-50 border-l border-gray-300 flex flex-col overflow-hidden`}
-          >
-            <div className="bg-white border-b border-gray-300 p-3 md:p-4 flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                <h2 className="text-base md:text-lg font-semibold text-gray-800">Invoice Preview</h2>
-                <div className="flex items-center justify-end sm:justify-start gap-2">
-                  <button
-                    onClick={downloadPDF}
-                    disabled={isLoading || isGeneratingPDF}
-                    className="flex items-center gap-1 md:gap-2 bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <>
-                        <Download className="w-3 h-3 md:w-4 md:h-4" />
-                        <span className="hidden sm:inline">PDF</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    disabled={isLoading || isGeneratingPDF}
-                    className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-green-700 transition text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Printer className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="hidden sm:inline">Print</span>
-                  </button>
+                {/* Modal Body moved inline */}
+                <div className="flex-1 overflow-auto rounded-lg">
+                  {isLoadingInvoices ? (
+                    <div className="flex items-center justify-center h-64">
+                      <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                    </div>
+                  ) : filteredInvoices.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                      <FileText className="w-16 h-16 mb-4 opacity-50" />
+                      <p className="text-lg font-medium">No invoices found</p>
+                      <p className="text-sm mt-2">Try a different search or create a new invoice</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          {/* Sticky Header */}
+                          <thead className="sticky top-0 z-10">
+                            <tr className="bg-[#0b1220] border-b border-[#243244]">
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Invoice ID
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Customer
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Issue Date
+                              </th>
+                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                                Status
+                              </th>
+                              <th className="text-right px-4 py-3 font-semibold text-gray-300">
+                                Total
+                              </th>
+                              <th className="text-center px-4 py-3 font-semibold text-gray-300">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {currentInvoices.map((invoice, idx) => {
+                              const stripe =
+                                idx % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#08121d]';
+
+                              const badge = getStatusBadge(invoice.paymentStatus);
+                              const customerDisplay = getCustomerDisplay(invoice.customer);
+
+                              return (
+                                <tr
+                                  key={invoice._id}
+                                  className={`${stripe} border-b border-[#162235] hover:bg-[#0b2a3a]/60 transition-colors`}
+                                >
+                                  {/* Invoice ID */}
+                                  <td className="px-4 py-3 font-medium text-gray-200">
+                                    {invoice.invoiceId}
+                                  </td>
+
+                                  {/* Customer */}
+                                  <td
+                                    className="px-4 py-3 text-gray-300 truncate max-w-[260px]"
+                                    title={customerDisplay}
+                                  >
+                                    {customerDisplay || 'Unknown Customer'}
+                                  </td>
+
+                                  {/* Date */}
+                                  <td className="px-4 py-3 text-gray-400">
+                                    {formatDate(invoice.issueDate)}
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${badge.cls}`}
+                                    >
+                                      {badge.icon}
+                                      {invoice.paymentStatus}
+                                    </span>
+                                  </td>
+
+                                  {/* Amount */}
+                                  <td className="px-4 py-3 text-right font-semibold text-green-400">
+                                    LKR {invoice.totalAmount.toFixed(2)}
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        onClick={() => handleLoadInvoice(invoice, 'view')}
+                                        title="View"
+                                        className="p-2 rounded-md text-blue-400 hover:bg-blue-500/20 transition"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleLoadInvoice(invoice, 'edit')}
+                                        title="Edit"
+                                        className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => {
+                                          if (invoice._id && invoice.invoiceId) {
+                                            handleDeleteInvoice(invoice._id, invoice.invoiceId);
+                                          }
+                                        }}
+                                        title="Delete"
+                                        className="p-2 rounded-md text-red-400 hover:bg-red-500/20 transition"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination */}
+                      {filteredTotalPages > 1 && (
+                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#334155]">
+                          <div className="text-sm text-gray-400">Showing {startIndex + 1} to {Math.min(endIndex, filteredInvoices.length)} of {filteredInvoices.length} invoices</div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg bg-[#0f172a] border border-[#334155] hover:bg-[#1e293b] transition disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Previous page"><ChevronLeft className="w-4 h-4 text-gray-300" /></button>
+                            <div className="flex items-center gap-1">
+                              {Array.from({ length: filteredTotalPages }, (_, i) => i + 1).map((page) => {
+                                const showPage = page === 1 || page === filteredTotalPages || (page >= currentPage - 1 && page <= currentPage + 1);
+                                const showEllipsis = (page === 2 && currentPage > 3) || (page === filteredTotalPages - 1 && currentPage < filteredTotalPages - 2);
+                                if (!showPage && !showEllipsis) return null;
+                                if (showEllipsis) return <span key={page} className="px-2 text-gray-500">...</span>;
+                                return (
+                                  <button key={page} onClick={() => setCurrentPage(page)} className={`px-3 py-1 rounded-lg text-sm font-medium transition ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-[#0f172a] text-gray-300 border border-[#334155] hover:bg-[#1e293b]'}`}>
+                                    {page}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <button onClick={() => setCurrentPage(prev => Math.min(filteredTotalPages, prev + 1))} disabled={currentPage === filteredTotalPages} className="p-2 rounded-lg bg-[#0f172a] border border-[#334155] hover:bg-[#1e293b] transition disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Next page"><ChevronRight className="w-4 h-4 text-gray-300" /></button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
-
-            <div
-              ref={containerRef}
-              className="flex-1 overflow-hidden bg-white flex items-center justify-center p-2 md:p-4"
-            >
-              <div
-                ref={invoiceRef}
-                data-invoice-container="true"
-                style={{
-                  transform: `scale(${scale})`,
-                  transformOrigin: 'center',
-                  width: '210mm',
-                  minHeight: '297mm',
-                  transition: 'transform 0.15s ease-out',
-                  boxShadow: isMobileView
-                    ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
-                    : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                  backgroundColor: 'white'
-                }}
+          ) : (
+            <>
+              {/* Left Panel - Form */}
+              <div className={`${isMobileView
+                ? (activePanel === 'form' ? 'w-full' : 'hidden')
+                : 'w-full lg:w-1/2'} overflow-y-auto p-4`}
               >
-                <ErrorBoundary>
-                  <InvoiceCanvas invoiceData={invoiceData} />
-                </ErrorBoundary>
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-10 h-10 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                  </div>
+                ) : (
+                  <ErrorBoundary>
+                    <InvoiceForm
+                      invoiceData={invoiceData}
+                      onFieldChange={handleFieldChange}
+                      onCustomerIdChange={handleCustomerIdChange}
+                      onAddItem={handleAddItem}
+                      onRemoveItem={handleRemoveItem}
+                      onUpdateItem={handleUpdateItem}
+                      inventoryItems={inventoryItems}
+                    />
+                  </ErrorBoundary>
+                )}
               </div>
-            </div>
-          </div>
+
+              {/* Right Panel - Canvas */}
+              <div
+                ref={rightPanelRef}
+                className={`${isMobileView
+                  ? (activePanel === 'preview' ? 'w-full' : 'hidden')
+                  : 'hidden lg:flex lg:w-1/2'}
+                  flex flex-col overflow-hidden`}
+              >
+
+                {/* Canvas Container */}
+                <div
+                  ref={containerRef}
+                  className="flex-1 overflow-hidden bg-[#0F172A] flex items-center justify-center p-1 md:p-2"
+                >
+                  <div
+                    ref={invoiceRef}
+                    data-invoice-container="true"
+                    style={{
+                      transform: `scale(${scale})`,
+                      transformOrigin: 'center',
+                      width: '210mm',
+                      minHeight: '297mm',
+                      transition: 'transform 0.15s ease-out',
+                      boxShadow: isMobileView
+                        ? '0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06)'
+                        : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                      backgroundColor: 'white'
+                    }}
+                  >
+                    <ErrorBoundary>
+                      <InvoiceCanvas invoiceData={invoiceData} />
+                    </ErrorBoundary>
+                  </div>
+                </div>
+
+                <div className="bg-[#0F172A] p-3 md:p-4 flex-shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:justify-end sm:items-center gap-2">
+                    <div className="flex items-center mb-3 me-3 justify-end gap-2">
+                      {isDirty && (
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-red-500 text-white px-3 py-1.5 rounded-md hover:bg-red-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={handleSaveChanges}
+                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSaving ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span className="hidden sm:inline">Save</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={downloadPDF}
+                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isGeneratingPDF ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline">PDF</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handlePrint}
+                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span className="hidden sm:inline">Print</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
