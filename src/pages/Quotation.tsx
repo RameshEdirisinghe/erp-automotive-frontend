@@ -443,7 +443,10 @@ const Quotation: React.FC = () => {
     try {
       setIsLoadingQuotations(true);
       const quotations = await quotationService.getAll();
-      setAllQuotations(quotations || []);
+      const sortedQuotations = (quotations || []).sort((a, b) => 
+        new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
+      );
+      setAllQuotations(sortedQuotations);
     } catch (error) {
       console.error('Error fetching quotations:', error);
       setAlert({
@@ -1037,7 +1040,7 @@ const Quotation: React.FC = () => {
                                   >
                                     {customerDisplay || 'Unknown Customer'}
                                   </td>
-                                  
+
                                   {/* Date */}
                                   <td className="hidden md:table-cell px-2 md:px-4 py-3 text-gray-400">
                                     {formatDate(quotation.issueDate)}
