@@ -1,4 +1,4 @@
-import React, { useEffect, type JSX } from "react";
+import React, { useEffect } from "react";
 import { X, CheckCircle, AlertTriangle, Info, AlertCircle } from "lucide-react";
 
 export type AlertType = "success" | "error" | "warning" | "info";
@@ -12,7 +12,7 @@ interface CustomAlertProps {
 
 const typeStyles: Record<
   AlertType,
-  { bg: string; iconBg: string; icon: JSX.Element }
+  { bg: string; iconBg: string; icon: React.ReactNode }
 > = {
   success: { bg: "bg-green-600", iconBg: "bg-green-700", icon: <CheckCircle size={24} /> },
   error: { bg: "bg-red-600", iconBg: "bg-red-700", icon: <AlertCircle size={24} /> },

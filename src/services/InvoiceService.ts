@@ -108,53 +108,40 @@ export const invoiceService = {
   },
 
   // Update invoice
-  async update(id: string, updateData: Partial<BackendInvoiceData>): Promise<InvoiceResponse> {
+  async update(invoiceId: string, updateData: Partial<BackendInvoiceData>): Promise<InvoiceResponse> {
     try {
-      const response = await api.put<InvoiceResponse>(`/invoices/${id}`, updateData);
+      const response = await api.put<InvoiceResponse>(`/invoices/${invoiceId}`, updateData);
       return response.data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
         ? error.message 
-        : `Failed to update invoice ${id}`;
+        : `Failed to update invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
 
-  // Update payment status
-  async updatePaymentStatus(id: string, paymentStatus: PaymentStatusType): Promise<InvoiceResponse> {
+  // Update status
+  async updatePaymentStatus(invoiceId: string, paymentStatus: PaymentStatusType): Promise<InvoiceResponse> {
     try {
-      const response = await api.put<InvoiceResponse>(`/invoices/${id}/payment-status`, { paymentStatus });
+      const response = await api.put<InvoiceResponse>(`/invoices/${invoiceId}/payment-status`, { paymentStatus });
       return response.data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
         ? error.message 
-        : `Failed to update payment status for invoice ${id}`;
+        : `Failed to update payment status for invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
 
   // Delete invoice
-  async delete(id: string): Promise<DeleteInvoiceResponse> {
+  async delete(invoiceId: string): Promise<DeleteInvoiceResponse> {
     try {
-      const response = await api.delete<DeleteInvoiceResponse>(`/invoices/${id}`);
+      const response = await api.delete<DeleteInvoiceResponse>(`/invoices/${invoiceId}`);
       return response.data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
         ? error.message 
-        : `Failed to delete invoice ${id}`;
-      throw new Error(errorMessage);
-    }
-  },
-
-  // Get sales overview
-  async getSalesOverview(): Promise<SalesOverviewResponse> {
-    try {
-      const response = await api.get<SalesOverviewResponse>("/invoices/analytics/sales-overview");
-      return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "Failed to fetch sales overview";
+        : `Failed to delete invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
@@ -167,16 +154,6 @@ export const invoiceService = {
     } catch (error: unknown) {
       console.error('Error fetching inventory items:', error);
       return [];
-    }
-  },
-
-  // Search or create customer
-  async searchCustomer(phone: string) {
-    try {
-      const response = await api.get(`/customers/phone/${phone}`);
-      return response.data;
-    } catch (error) {
-      return null;
     }
   },
 
@@ -206,15 +183,3 @@ export const invoiceService = {
     }
   }
 };
-
-export const getAllInvoices = invoiceService.getAll;
-export const getNextInvoiceId = invoiceService.getNextId;
-export const getInvoiceById = invoiceService.getById;
-export const getInvoiceByInvoiceId = invoiceService.getByInvoiceId;
-export const createInvoice = invoiceService.create;
-export const updateInvoice = invoiceService.update;
-export const updateInvoicePaymentStatus = invoiceService.updatePaymentStatus;
-export const deleteInvoice = invoiceService.delete;
-export const getSalesOverview = invoiceService.getSalesOverview;
-export const getInventoryItems = invoiceService.getInventoryItems;
-export const getAllCustomers = invoiceService.getAllCustomers;

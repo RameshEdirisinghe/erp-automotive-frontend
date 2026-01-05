@@ -73,6 +73,7 @@ export interface InvoiceData {
 }
 
 export interface BackendInvoiceData {
+  _id?: string;
   invoiceId?: string;
   customer: string;
   items: Array<{

@@ -1,9 +1,9 @@
+import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import type { JSX } from "react/jsx-dev-runtime";
 
 interface Props {
-  children: JSX.Element;
+  children: React.ReactNode;
 }
 
 export default function ProtectedRoute({ children }: Props) {
