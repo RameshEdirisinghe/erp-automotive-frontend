@@ -18,13 +18,15 @@ import {
   XCircle,
   Clock,
   Search,
+  AlertTriangle,
 } from "lucide-react";
 import QuotationForm from "../components/quotation/QuotationForm";
 import QuotationCanvas from "../components/quotation/QuotationCanvas";
 import type {
   QuotationData,
   QuotationItem,
-  BackendQuotationData
+  BackendQuotationData,
+  QuotationResponse
 } from "../types/quotation";
 import type { InventoryItem as QuotationInventoryItem } from "../types/inventory";
 import { PaymentMethod } from "../types/invoice";
@@ -57,7 +59,7 @@ const Quotation: React.FC = () => {
   const lastSavedAtRef = useRef<string | null>(null);
 
   const [viewMode, setViewMode] = useState<'edit' | 'manage'>('edit');
-  const [allQuotations, setAllQuotations] = useState<BackendQuotationData[]>([]);
+  const [allQuotations, setAllQuotations] = useState<QuotationResponse[]>([]);
   const [isLoadingQuotations, setIsLoadingQuotations] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -245,6 +247,28 @@ const Quotation: React.FC = () => {
     }
   };
 
+  const statusBadgeMap: Record<
+    typeof QuotationStatus[keyof typeof QuotationStatus],
+    { cls: string; icon: React.ReactNode }
+  > = {
+    [QuotationStatus.PENDING]: {
+      cls: 'bg-yellow-200 text-yellow-900',
+      icon: <Clock className="w-3 h-3" />,
+    },
+    [QuotationStatus.ACCEPTED]: {
+      cls: 'bg-green-200 text-green-900',
+      icon: <CheckCircle className="w-3 h-3" />,
+    },
+    [QuotationStatus.REJECTED]: {
+      cls: 'bg-red-200 text-red-900',
+      icon: <XCircle className="w-3 h-3" />,
+    },
+    [QuotationStatus.EXPIRED]: {
+      cls: 'bg-gray-200 text-gray-900',
+      icon: <AlertTriangle className="w-3 h-3" />,
+    },
+  };
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) {
@@ -419,11 +443,7 @@ const Quotation: React.FC = () => {
     try {
       setIsLoadingQuotations(true);
       const quotations = await quotationService.getAll();
-      const normalized = (quotations || []).map((q: any) => ({
-        ...q,
-        customer: q?.customer && typeof q.customer === 'object' ? (q.customer._id || q.customer.id || q.customer) : q.customer,
-      })) as BackendQuotationData[];
-      setAllQuotations(normalized);
+      setAllQuotations(quotations || []);
     } catch (error) {
       console.error('Error fetching quotations:', error);
       setAlert({
@@ -552,16 +572,6 @@ const Quotation: React.FC = () => {
       month: 'short',
       day: 'numeric'
     });
-  };
-
-  const getStatusBadge = (status: string) => {
-    const colors: Record<string, { cls: string; icon?: React.ReactNode }> = {
-      'PENDING': { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', icon: <Clock className="w-3 h-3 mr-1" /> },
-      'ACCEPTED': { cls: 'bg-green-500/10 text-green-400 border-green-500/20', icon: <CheckCircle className="w-3 h-3 mr-1" /> },
-      'REJECTED': { cls: 'bg-red-500/10 text-red-400 border-red-500/20', icon: <XCircle className="w-3 h-3 mr-1" /> },
-      'EXPIRED': { cls: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: <Clock className="w-3 h-3 mr-1" /> },
-    };
-    return colors[status] || colors['PENDING'];
   };
 
   const downloadPDF = async () => {
@@ -981,23 +991,23 @@ const Quotation: React.FC = () => {
                         <table className="w-full border-collapse text-sm">
                           {/* Sticky Header */}
                           <thead className="sticky top-0 z-10">
-                            <tr className="bg-[#0b1220] border-b border-[#243244]">
-                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                            <tr className="bg-[#1e293b] border-b border-[#243244]">
+                              <th className="text-left px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Quotation ID
                               </th>
-                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                              <th className="text-left px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Customer
                               </th>
-                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                              <th className="hidden md:table-cell text-center px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Issue Date
                               </th>
-                              <th className="text-left px-4 py-3 font-semibold text-gray-300">
+                              <th className="hidden sm:table-cell text-center px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Status
                               </th>
-                              <th className="text-right px-4 py-3 font-semibold text-gray-300">
+                              <th className="text-right px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Total
                               </th>
-                              <th className="text-center px-4 py-3 font-semibold text-gray-300">
+                              <th className="text-center px-2 md:px-4 py-3 font-semibold text-gray-300">
                                 Actions
                               </th>
                             </tr>
@@ -1008,7 +1018,6 @@ const Quotation: React.FC = () => {
                               const stripe =
                                 idx % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#08121d]';
 
-                              const badge = getStatusBadge(quotation.status);
                               const customerDisplay = getCustomerDisplay(quotation.customer);
 
                               return (
@@ -1017,40 +1026,42 @@ const Quotation: React.FC = () => {
                                   className={`${stripe} border-b border-[#162235] hover:bg-[#0b2a3a]/60 transition-colors`}
                                 >
                                   {/* Quotation ID */}
-                                  <td className="px-4 py-3 font-medium text-gray-200">
+                                  <td className="px-2 md:px-4 py-3 font-medium text-gray-200">
                                     {quotation.quotationId}
                                   </td>
 
                                   {/* Customer */}
                                   <td
-                                    className="px-4 py-3 text-gray-300 truncate max-w-[260px]"
+                                    className="px-2 md:px-4 py-3 text-gray-300 truncate max-w-[120px] sm:max-w-[200px] md:max-w-[260px]"
                                     title={customerDisplay}
                                   >
                                     {customerDisplay || 'Unknown Customer'}
                                   </td>
-
+                                  
                                   {/* Date */}
-                                  <td className="px-4 py-3 text-gray-400">
+                                  <td className="hidden md:table-cell px-2 md:px-4 py-3 text-gray-400">
                                     {formatDate(quotation.issueDate)}
                                   </td>
 
                                   {/* Status */}
-                                  <td className="px-4 py-3">
-                                    <span
-                                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${badge.cls}`}
-                                    >
-                                      {badge.icon}
-                                      {quotation.status}
-                                    </span>
+                                  <td className="hidden sm:table-cell px-2 md:px-4 py-3">
+                                    {statusBadgeMap[quotation.status] && (
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${statusBadgeMap[quotation.status].cls}`}
+                                      >
+                                        {statusBadgeMap[quotation.status].icon}
+                                        {quotation.status}
+                                      </span>
+                                    )}
                                   </td>
 
                                   {/* Amount */}
-                                  <td className="px-4 py-3 text-right font-semibold text-green-400">
+                                  <td className="px-2 md:px-4 py-3 text-right font-semibold text-white">
                                     LKR {quotation.totalAmount.toFixed(2)}
                                   </td>
 
                                   {/* Actions */}
-                                  <td className="px-4 py-3">
+                                  <td className="px-2 md:px-4 py-3">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
                                         onClick={() => handleLoadQuotation(quotation, 'view')}
@@ -1090,7 +1101,7 @@ const Quotation: React.FC = () => {
 
                       {/* Pagination */}
                       {filteredTotalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#334155]">
+                        <div className="flex items-center justify-between m-2">
                           <div className="text-sm text-gray-400">Showing {startIndex + 1} to {Math.min(endIndex, filteredQuotations.length)} of {filteredQuotations.length} quotations</div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg bg-[#0f172a] border border-[#334155] hover:bg-[#1e293b] transition disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Previous page"><ChevronLeft className="w-4 h-4 text-gray-300" /></button>
