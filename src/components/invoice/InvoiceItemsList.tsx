@@ -117,10 +117,10 @@ export const InvoiceItemsList: React.FC<InvoiceItemsListProps> = ({
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <h4 className="font-medium text-gray-200">
-                        {item.itemName || inventoryItem?.product_name || `Item ${item.item.substring(0, 8)}...`}
+                        {item.itemName || inventoryItem?.product_name || `Item ${item.item ? item.item.substring(0, 8) : 'Unknown'}...`}
                       </h4>
                       <div className="text-sm text-gray-400">
-                        Code: {inventoryItem?.product_code || item.item.substring(0, 12)}...
+                        Code: {inventoryItem?.product_code || (item.item ? item.item.substring(0, 12) : 'N/A')}...
                       </div>
                       {inventoryItem && (
                         <div className="text-xs text-gray-500 mt-1">

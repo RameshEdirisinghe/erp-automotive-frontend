@@ -26,7 +26,8 @@ import type {
   InvoiceItem,
   BackendInvoiceData,
   PaymentStatusType,
-  PaymentMethodType
+  PaymentMethodType,
+  InvoiceCustomer
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
@@ -59,6 +60,7 @@ const Invoice: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'edit' | 'manage'>('edit');
   const [allInvoices, setAllInvoices] = useState<BackendInvoiceData[]>([]);
+  const [allCustomers, setAllCustomers] = useState<InvoiceCustomer[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -482,14 +484,47 @@ const Invoice: React.FC = () => {
   const fetchAllInvoices = async () => {
     try {
       setIsLoadingInvoices(true);
+      
+      // Fetch all customers
+      try {
+        const customers = await invoiceService.getAllCustomers();
+        setAllCustomers(customers);
+      } catch (customerError) {
+        console.warn('Could not fetch customers:', customerError);
+      }
+
+      // Fetch all invoices
       const invoices = await invoiceService.getAll();
-      const normalized = (invoices || []).map((invoice: any) => {
+      
+      // Sort invoices
+      const sortedInvoices = [...invoices].sort((a, b) => {
+        const dateA = new Date(a.created_at || a.issueDate).getTime();
+        const dateB = new Date(b.created_at || b.issueDate).getTime();
+        return dateB - dateA;
+      });
+      
+      // Map invoices with customer details
+      const normalized = sortedInvoices.map((invoice: any) => {
+        // Extract customer details
+        let customer = invoice.customer;
+        let customerName = '';
+        
+        if (typeof customer === 'object' && customer !== null) {
+          customerName = customer.fullName || customer.name || '';
+        } else if (typeof customer === 'string') {
+          const foundCustomer = allCustomers.find(c => c._id === customer);
+          if (foundCustomer) {
+            customerName = foundCustomer.fullName || '';
+          }
+        }
+
         return {
           _id: invoice._id,
           invoiceId: invoice.invoiceId,
-          customer: invoice.customer?._id || invoice.customer || '',
+          customer: customer,
+          customerName: customerName,
           items: invoice.items.map((item: any) => ({
-            item: item.item?._id || item.item,
+            item: item.item?._id || item.item || '',
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             total: item.total
@@ -506,8 +541,9 @@ const Invoice: React.FC = () => {
           notes: invoice.notes,
           created_at: invoice.created_at,
           updated_at: invoice.updated_at
-        } as BackendInvoiceData;
+        } as BackendInvoiceData & { customerName: string };
       });
+      
       setAllInvoices(normalized);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -520,14 +556,50 @@ const Invoice: React.FC = () => {
     }
   };
 
-  const handleLoadInvoice = (invoice: any, mode: 'view' | 'edit') => {
+  // Helper function to get customer name for display
+  const getCustomerDisplay = (invoice: any): string => {
+    if (!invoice) return 'Unknown Customer';
+    
+    if (invoice.customerName) {
+      return invoice.customerName;
+    }
+    
+    if (typeof invoice.customer === 'object' && invoice.customer !== null) {
+      return invoice.customer.fullName || invoice.customer.name || 'Unknown Customer';
+    }
+    
+    if (typeof invoice.customer === 'string' && allCustomers.length > 0) {
+      const foundCustomer = allCustomers.find(c => c._id === invoice.customer);
+      if (foundCustomer) {
+        return foundCustomer.fullName || 'Unknown Customer';
+      }
+    }
+    
+    return 'Unknown Customer';
+  };
+
+  const handleLoadInvoice = async (invoiceData: any, mode: 'view' | 'edit') => {
     try {
+      console.log('Loading invoice:', invoiceData);
+      
+      // Fetch full invoice details
+      let fullInvoiceData = invoiceData;
+      if (invoiceData._id) {
+        try {
+          const response = await invoiceService.getById(invoiceData._id);
+          fullInvoiceData = response as any;
+          console.log('Fetched full invoice:', fullInvoiceData);
+        } catch (fetchError) {
+          console.warn('Could not fetch full invoice details, using summary data:', fetchError);
+        }
+      }
+
       // Map items from backend response
-      const mappedItems: InvoiceItem[] = invoice.items.map((item: any, index: number) => {
+      const mappedItems: InvoiceItem[] = fullInvoiceData.items.map((item: any, index: number) => {
         const itemData = item.item;
         return {
           id: (Date.now() + index).toString(),
-          item: itemData?._id || item.item,
+          item: itemData?._id || item.item || '',
           itemName: itemData?.product_name || 'Unknown Item',
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -536,37 +608,53 @@ const Invoice: React.FC = () => {
       });
 
       // Calculate discount percentage
-      const discountPercentage = invoice.subTotal > 0
-        ? (invoice.discount / invoice.subTotal) * 100
+      const discountPercentage = fullInvoiceData.subTotal > 0
+        ? (fullInvoiceData.discount / fullInvoiceData.subTotal) * 100
         : 0;
 
-      // dates for input (YYYY-MM-DD format)
+      // Format dates for input (YYYY-MM-DD format)
       const formatDateForInput = (dateString: string) => {
         if (!dateString) return '';
         return dateString.split('T')[0];
       };
 
+      // Get customer details if available
+      let customerDetails = undefined;
+      if (typeof fullInvoiceData.customer === 'object' && fullInvoiceData.customer !== null) {
+        customerDetails = fullInvoiceData.customer;
+      } else if (typeof fullInvoiceData.customer === 'string') {
+        
+        const foundCustomer = allCustomers.find(c => c._id === fullInvoiceData.customer);
+        if (foundCustomer) {
+          customerDetails = foundCustomer;
+        }
+      }
+
       const loadedData: InvoiceData = {
-        _id: invoice._id,
-        invoiceId: invoice.invoiceId,
-        customer: invoice.customer?._id || invoice.customer,
-        customerDetails: invoice.customer,
+        _id: fullInvoiceData._id,
+        invoiceId: fullInvoiceData.invoiceId,
+        customer: typeof fullInvoiceData.customer === 'object' 
+          ? (fullInvoiceData.customer as any)?._id || '' 
+          : fullInvoiceData.customer || '',
+        customerDetails: customerDetails,
         items: mappedItems,
-        subTotal: invoice.subTotal,
-        discount: invoice.discount,
+        subTotal: fullInvoiceData.subTotal,
+        discount: fullInvoiceData.discount,
         discountPercentage: discountPercentage,
-        totalAmount: invoice.totalAmount,
-        paymentMethod: invoice.paymentMethod,
-        paymentStatus: invoice.paymentStatus,
-        bankDepositDate: invoice.bankDepositDate ? formatDateForInput(invoice.bankDepositDate) : undefined,
-        issueDate: formatDateForInput(invoice.issueDate),
-        dueDate: formatDateForInput(invoice.dueDate),
-        vehicleNumber: invoice.vehicleNumber || '',
-        notes: invoice.notes || '',
-        created_at: invoice.created_at,
-        updated_at: invoice.updated_at
+        totalAmount: fullInvoiceData.totalAmount,
+        paymentMethod: fullInvoiceData.paymentMethod,
+        paymentStatus: fullInvoiceData.paymentStatus,
+        bankDepositDate: fullInvoiceData.bankDepositDate ? formatDateForInput(fullInvoiceData.bankDepositDate) : undefined,
+        issueDate: formatDateForInput(fullInvoiceData.issueDate),
+        dueDate: formatDateForInput(fullInvoiceData.dueDate),
+        vehicleNumber: fullInvoiceData.vehicleNumber || '',
+        notes: fullInvoiceData.notes || '',
+        created_at: fullInvoiceData.created_at,
+        updated_at: fullInvoiceData.updated_at
       };
 
+      console.log('Loaded invoice data:', loadedData);
+      
       setInvoiceData(loadedData);
       
       lastSavedRef.current = loadedData;
@@ -574,11 +662,11 @@ const Invoice: React.FC = () => {
       lastSavedAtRef.current = new Date().toISOString();
 
       setViewMode('edit');
-      setActivePanel(mode === 'view' ? 'preview' : 'form');
+      setActivePanel('form');
       
       setAlert({
         type: 'success',
-        message: `Invoice ${invoice.invoiceId} loaded successfully`
+        message: `Invoice ${fullInvoiceData.invoiceId} loaded successfully`
       });
     } catch (error) {
       console.error('Error loading invoice:', error);
@@ -618,6 +706,7 @@ const Invoice: React.FC = () => {
   const handleOpenManageModal = () => {
     setViewMode('manage');
     setCurrentPage(1);
+    fetchAllInvoices();
   };
 
   useEffect(() => {
@@ -628,18 +717,12 @@ const Invoice: React.FC = () => {
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  
-  const getCustomerDisplay = (customer: any) => {
-    if (!customer) return '';
-    if (typeof customer === 'object') return String(customer.fullName || customer.name || '');
-    return String(customer);
-  };
 
   const filteredInvoices = manageSearch.trim()
     ? allInvoices.filter(q => {
       const idMatch = String(q.invoiceId).toLowerCase().includes(manageSearch.toLowerCase());
-      const customerDisplay = getCustomerDisplay(q.customer);
-      const customerMatch = customerDisplay.toLowerCase().includes(manageSearch.toLowerCase());
+      const customerName = getCustomerDisplay(q);
+      const customerMatch = customerName.toLowerCase().includes(manageSearch.toLowerCase());
       return idMatch || customerMatch;
     })
     : allInvoices;
@@ -648,12 +731,16 @@ const Invoice: React.FC = () => {
   const currentInvoices = filteredInvoices.slice(startIndex, Math.min(endIndex, filteredInvoices.length));
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -1109,7 +1196,7 @@ const Invoice: React.FC = () => {
                                 idx % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#08121d]';
 
                               const badge = getStatusBadge(invoice.paymentStatus);
-                              const customerDisplay = getCustomerDisplay(invoice.customer);
+                              const customerDisplay = getCustomerDisplay(invoice);
 
                               return (
                                 <tr
@@ -1126,7 +1213,7 @@ const Invoice: React.FC = () => {
                                     className="px-4 py-3 text-gray-300 truncate max-w-[260px]"
                                     title={customerDisplay}
                                   >
-                                    {customerDisplay || 'Unknown Customer'}
+                                    {customerDisplay}
                                   </td>
 
                                   {/* Date */}
