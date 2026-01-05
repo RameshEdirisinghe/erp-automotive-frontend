@@ -262,26 +262,49 @@ const Invoice: React.FC = () => {
   }, [isDirty]);
 
   const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
-    return {
+  
+    const formatDateToISO = (dateString: string): string => {
+      if (!dateString) return new Date().toISOString();
+     
+      if (!dateString.includes('T')) {
+        return new Date(dateString + 'T00:00:00.000Z').toISOString();
+      }
+      return dateString;
+    };
+
+    const backendData: BackendInvoiceData = {
       invoiceId: data.invoiceId,
       customer: data.customer,
       items: data.items.map(item => ({
         item: item.item,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        total: item.total,
+        total: item.total
       })),
       subTotal: data.subTotal,
       discount: data.discount,
       totalAmount: data.totalAmount,
-      paymentMethod: data.paymentMethod,
       paymentStatus: data.paymentStatus,
-      bankDepositDate: data.bankDepositDate,
-      issueDate: data.issueDate,
-      dueDate: data.dueDate,
+      paymentMethod: data.paymentMethod,
+      issueDate: formatDateToISO(data.issueDate),
+      dueDate: formatDateToISO(data.dueDate),
       vehicleNumber: data.vehicleNumber,
-      notes: data.notes,
     };
+
+    // Add optional fields only if they exist
+    if (data.notes && data.notes.trim()) {
+      backendData.notes = data.notes;
+    }
+    
+    if (data.bankDepositDate && data.bankDepositDate.trim()) {
+      backendData.bankDepositDate = formatDateToISO(data.bankDepositDate);
+    }
+
+    if (data._id) {
+      backendData._id = data._id;
+    }
+
+    return backendData;
   };
 
   const handleRemoveItem = (id: string) => {
@@ -358,10 +381,27 @@ const Invoice: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!invoiceData.customer || invoiceData.items.length === 0) {
+    // Validate required fields
+    if (!invoiceData.customer) {
       setAlert({
         type: 'error',
-        message: 'Please add customer and at least one item before saving'
+        message: 'Please select a customer before saving'
+      });
+      return false;
+    }
+
+    if (invoiceData.items.length === 0) {
+      setAlert({
+        type: 'error',
+        message: 'Please add at least one item before saving'
+      });
+      return false;
+    }
+
+    if (!invoiceData.vehicleNumber || invoiceData.vehicleNumber.trim() === '') {
+      setAlert({
+        type: 'error',
+        message: 'Please enter a vehicle number'
       });
       return false;
     }
@@ -370,30 +410,29 @@ const Invoice: React.FC = () => {
       setIsSaving(true);
 
       const backendData = prepareInvoiceForSave(invoiceData);
-      console.log(backendData);
+      console.log('Saving invoice data:', JSON.stringify(backendData, null, 2));
 
+      let response;
+      
       if (invoiceData._id) {
         setAlert({
           type: 'info',
           message: 'Updating invoice...'
         });
 
-        await invoiceService.update(invoiceData._id, backendData);
+        response = await invoiceService.update(invoiceData._id, backendData);
 
         setAlert({
           type: 'success',
           message: 'Invoice updated successfully!'
         });
-        lastSavedRef.current = { ...invoiceData };
-        setIsDirty(false);
-        lastSavedAtRef.current = new Date().toISOString();
       } else {
         setAlert({
           type: 'info',
           message: 'Saving invoice...'
         });
 
-        const response = await invoiceService.create(backendData);
+        response = await invoiceService.create(backendData);
 
         setInvoiceData(prev => ({
           ...prev,
@@ -404,17 +443,35 @@ const Invoice: React.FC = () => {
           type: 'success',
           message: 'Invoice saved successfully!'
         });
-        lastSavedRef.current = { ...invoiceData, _id: response._id } as InvoiceData;
-        setIsDirty(false);
-        lastSavedAtRef.current = new Date().toISOString();
       }
 
+      lastSavedRef.current = { ...invoiceData, _id: response._id } as InvoiceData;
+      setIsDirty(false);
+      lastSavedAtRef.current = new Date().toISOString();
+
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving invoice:', error);
+      
+      let errorMessage = 'Failed to save invoice';
+      if (error.response) {
+        // Server responded with error
+        if (error.response.status === 400) {
+          errorMessage = 'Invalid data. Please check all fields are filled correctly.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error. Please try again or contact support.';
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.request) {
+        errorMessage = 'No response from server. Please check your connection.';
+      } else {
+        errorMessage = error.message || 'Failed to save invoice';
+      }
+      
       setAlert({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to save invoice'
+        message: errorMessage
       });
       return false;
     } finally {
@@ -426,10 +483,31 @@ const Invoice: React.FC = () => {
     try {
       setIsLoadingInvoices(true);
       const invoices = await invoiceService.getAll();
-      const normalized = (invoices || []).map((q: any) => ({
-        ...q,
-        customer: q?.customer && typeof q.customer === 'object' ? (q.customer._id || q.customer.id || q.customer) : q.customer,
-      })) as BackendInvoiceData[];
+      const normalized = (invoices || []).map((invoice: any) => {
+        return {
+          _id: invoice._id,
+          invoiceId: invoice.invoiceId,
+          customer: invoice.customer?._id || invoice.customer || '',
+          items: invoice.items.map((item: any) => ({
+            item: item.item?._id || item.item,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total
+          })),
+          subTotal: invoice.subTotal,
+          discount: invoice.discount,
+          totalAmount: invoice.totalAmount,
+          paymentStatus: invoice.paymentStatus,
+          paymentMethod: invoice.paymentMethod,
+          bankDepositDate: invoice.bankDepositDate,
+          issueDate: invoice.issueDate,
+          dueDate: invoice.dueDate,
+          vehicleNumber: invoice.vehicleNumber,
+          notes: invoice.notes,
+          created_at: invoice.created_at,
+          updated_at: invoice.updated_at
+        } as BackendInvoiceData;
+      });
       setAllInvoices(normalized);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -443,61 +521,72 @@ const Invoice: React.FC = () => {
   };
 
   const handleLoadInvoice = (invoice: any, mode: 'view' | 'edit') => {
-    const mappedItems: InvoiceItem[] = invoice.items.map((item: any, index: number) => ({
-      id: (Date.now() + index).toString(),
-      item: item.item._id || item.item,
-      itemName: item.item.product_name || item.itemName || 'Unknown Item',
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      total: item.total
-    }));
+    try {
+      // Map items from backend response
+      const mappedItems: InvoiceItem[] = invoice.items.map((item: any, index: number) => {
+        const itemData = item.item;
+        return {
+          id: (Date.now() + index).toString(),
+          item: itemData?._id || item.item,
+          itemName: itemData?.product_name || 'Unknown Item',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        };
+      });
 
-    const discountPercentage = invoice.subTotal > 0
-      ? (invoice.discount / invoice.subTotal) * 100
-      : 0;
+      // Calculate discount percentage
+      const discountPercentage = invoice.subTotal > 0
+        ? (invoice.discount / invoice.subTotal) * 100
+        : 0;
 
-    setInvoiceData({
-      _id: invoice._id,
-      invoiceId: invoice.invoiceId,
-      customer: invoice.customer._id || invoice.customer,
-      customerDetails: invoice.customer,
-      items: mappedItems,
-      subTotal: invoice.subTotal,
-      discount: invoice.discount,
-      discountPercentage: discountPercentage,
-      totalAmount: invoice.totalAmount,
-      paymentMethod: invoice.paymentMethod,
-      paymentStatus: invoice.paymentStatus,
-      bankDepositDate: invoice.bankDepositDate?.split('T')[0],
-      issueDate: invoice.issueDate.split('T')[0],
-      dueDate: invoice.dueDate.split('T')[0],
-      vehicleNumber: invoice.vehicleNumber || '',
-      notes: invoice.notes || '',
-    });
+      // dates for input (YYYY-MM-DD format)
+      const formatDateForInput = (dateString: string) => {
+        if (!dateString) return '';
+        return dateString.split('T')[0];
+      };
 
-    lastSavedRef.current = {
-      _id: invoice._id,
-      invoiceId: invoice.invoiceId,
-      customer: invoice.customer._id || invoice.customer,
-      customerDetails: invoice.customer,
-      items: mappedItems,
-      subTotal: invoice.subTotal,
-      discount: invoice.discount,
-      discountPercentage: discountPercentage,
-      totalAmount: invoice.totalAmount,
-      paymentMethod: invoice.paymentMethod,
-      paymentStatus: invoice.paymentStatus,
-      bankDepositDate: invoice.bankDepositDate?.split('T')[0],
-      issueDate: invoice.issueDate.split('T')[0],
-      dueDate: invoice.dueDate.split('T')[0],
-      vehicleNumber: invoice.vehicleNumber || '',
-      notes: invoice.notes || '',
-    } as InvoiceData;
-    setIsDirty(false);
-    lastSavedAtRef.current = new Date().toISOString();
+      const loadedData: InvoiceData = {
+        _id: invoice._id,
+        invoiceId: invoice.invoiceId,
+        customer: invoice.customer?._id || invoice.customer,
+        customerDetails: invoice.customer,
+        items: mappedItems,
+        subTotal: invoice.subTotal,
+        discount: invoice.discount,
+        discountPercentage: discountPercentage,
+        totalAmount: invoice.totalAmount,
+        paymentMethod: invoice.paymentMethod,
+        paymentStatus: invoice.paymentStatus,
+        bankDepositDate: invoice.bankDepositDate ? formatDateForInput(invoice.bankDepositDate) : undefined,
+        issueDate: formatDateForInput(invoice.issueDate),
+        dueDate: formatDateForInput(invoice.dueDate),
+        vehicleNumber: invoice.vehicleNumber || '',
+        notes: invoice.notes || '',
+        created_at: invoice.created_at,
+        updated_at: invoice.updated_at
+      };
 
-    setViewMode('edit');
-    setActivePanel(mode === 'view' ? 'preview' : 'form');
+      setInvoiceData(loadedData);
+      
+      lastSavedRef.current = loadedData;
+      setIsDirty(false);
+      lastSavedAtRef.current = new Date().toISOString();
+
+      setViewMode('edit');
+      setActivePanel(mode === 'view' ? 'preview' : 'form');
+      
+      setAlert({
+        type: 'success',
+        message: `Invoice ${invoice.invoiceId} loaded successfully`
+      });
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load invoice data'
+      });
+    }
   };
 
   const handleDeleteInvoice = async (invoiceId: string, invoiceNumber: string) => {
@@ -539,6 +628,7 @@ const Invoice: React.FC = () => {
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
+  
   const getCustomerDisplay = (customer: any) => {
     if (!customer) return '';
     if (typeof customer === 'object') return String(customer.fullName || customer.name || '');
@@ -553,6 +643,7 @@ const Invoice: React.FC = () => {
       return idMatch || customerMatch;
     })
     : allInvoices;
+    
   const filteredTotalPages = Math.max(1, Math.ceil(filteredInvoices.length / itemsPerPage));
   const currentInvoices = filteredInvoices.slice(startIndex, Math.min(endIndex, filteredInvoices.length));
 
@@ -567,11 +658,11 @@ const Invoice: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, { cls: string; icon?: React.ReactNode }> = {
-      'PENDING': { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', icon: <Clock className="w-3 h-3 mr-1" /> },
-      'COMPLETED': { cls: 'bg-green-500/10 text-green-400 border-green-500/20', icon: <CheckCircle className="w-3 h-3 mr-1" /> },
-      'REJECTED': { cls: 'bg-red-500/10 text-red-400 border-red-500/20', icon: <XCircle className="w-3 h-3 mr-1" /> },
+      'Pending': { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', icon: <Clock className="w-3 h-3 mr-1" /> },
+      'Completed': { cls: 'bg-green-500/10 text-green-400 border-green-500/20', icon: <CheckCircle className="w-3 h-3 mr-1" /> },
+      'Rejected': { cls: 'bg-red-500/10 text-red-400 border-red-500/20', icon: <XCircle className="w-3 h-3 mr-1" /> },
     };
-    return colors[status] || colors['PENDING'];
+    return colors[status] || colors['Pending'];
   };
 
   const downloadPDF = async () => {
@@ -972,7 +1063,6 @@ const Invoice: React.FC = () => {
             <div className="w-full overflow-auto p-4">
               <div className="bg-[#1e293b] rounded-lg w-full h-full flex flex-col border border-[#334155] shadow-2xl">
 
-                {/* Modal Body moved inline */}
                 <div className="flex-1 overflow-auto rounded-lg">
                   {isLoadingInvoices ? (
                     <div className="flex items-center justify-center h-64">
@@ -989,7 +1079,7 @@ const Invoice: React.FC = () => {
                       {/* Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse text-sm">
-                          {/* Sticky Header */}
+                          
                           <thead className="sticky top-0 z-10">
                             <tr className="bg-[#0b1220] border-b border-[#243244]">
                               <th className="text-left px-4 py-3 font-semibold text-gray-300">
