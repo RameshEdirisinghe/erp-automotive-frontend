@@ -7,7 +7,7 @@ import InvoiceViewModal from "../components/InvoiceViewModal";
 import { LoadingSpinner } from "../components/common";
 import { DollarSign, User } from "lucide-react";
 import type { InvoiceResponse } from "../types/invoice";
-import type { FinancePaymentData } from "../types/finance";
+import type { FinancePaymentData, FinanceTransaction } from "../types/finance";
 import { invoiceService } from "../services/InvoiceService";
 import { financeService } from "../services/FinanceService";
 import html2canvas from "html2canvas";
@@ -26,7 +26,9 @@ const Finance: React.FC = () => {
     endDate: ""
   });
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
+  const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceResponse | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceView, setShowInvoiceView] = useState(false);
@@ -74,8 +76,29 @@ const Finance: React.FC = () => {
     }
   };
 
+  // Load finance transactions
+  const loadFinanceTransactions = async () => {
+    try {
+      setLoadingTransactions(true);
+      const transactions = await financeService.getAll();
+      setFinanceTransactions(transactions);
+      console.log('Loaded finance transactions:', transactions);
+    } catch (error) {
+      console.error('Error loading finance transactions:', error);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
+
   useEffect(() => {
-    loadInvoices();
+    const loadAllData = async () => {
+      await Promise.all([
+        loadInvoices(),
+        loadFinanceTransactions()
+      ]);
+    };
+    
+    loadAllData();
   }, []);
 
   const handleMarkAsPaid = (invoice: InvoiceResponse) => {
@@ -116,6 +139,8 @@ const Finance: React.FC = () => {
         amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
       };
 
+      console.log('Creating payment transaction:', paymentData);
+      
       // Create finance transaction
       await financeService.create(paymentData);
 
@@ -127,8 +152,11 @@ const Finance: React.FC = () => {
         message: 'Payment successfully recorded for invoice ' + selectedInvoice.invoiceId
       });
 
-      // Refresh invoices list to update status
-      await loadInvoices();
+      // Refresh data
+      await Promise.all([
+        loadInvoices(),
+        loadFinanceTransactions()
+      ]);
 
       // Reset form
       setShowPaymentModal(false);
@@ -420,6 +448,7 @@ const Finance: React.FC = () => {
               onViewInvoice={handleViewInvoice}
               onDownloadInvoice={handleDownloadInvoice}
               onMarkAsPaid={handleMarkAsPaid}
+              financeTransactions={financeTransactions}
             />
           )}
         </div>
