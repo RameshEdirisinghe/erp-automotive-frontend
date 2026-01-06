@@ -19,7 +19,9 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     Rejected: { bg: "bg-red-500/20 border-red-500/30", text: "text-red-400", dot: "bg-red-400" },
     Default: { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" },
   };
-  const { bg, text, dot, label } = statusMap[status] || statusMap.Default;
+
+  const { bg, text, dot } = statusMap[status] || statusMap.Default;
+ 
   return (
     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${bg} ${text} border`}>
       <span className={`w-2 h-2 rounded-full ${dot}`} />
@@ -30,7 +32,6 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 const FinanceTable: React.FC<FinanceTableProps> = ({
   invoices,
-  loading,
   onViewInvoice,
   onDownloadInvoice,
   onMarkAsPaid,
