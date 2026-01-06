@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { DollarSign, AlertCircle } from 'lucide-react';
 import { Modal, Button, FormField, FormInput, FormSelect } from './common';
 import type { InvoiceResponse } from '../types/invoice';
+import { financeService } from '../services/FinanceService';
 
 interface PaymentDetails {
   method: 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque';
@@ -33,7 +34,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Validate form
+  useEffect(() => {
+    if (isOpen) {
+      const fetchNextId = async () => {
+        try {
+          const nextId = await financeService.getNextId();
+          console.log('Next Finance ID:', nextId);
+        } catch (error) {
+          console.error('Error fetching next ID:', error);
+        }
+      };
+      fetchNextId();
+    }
+  }, [isOpen]);
+
   const validateForm = useCallback(() => {
     const newErrors: Record<string, string> = {};
 
@@ -43,6 +57,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     if (!paymentDetails.amount || parseFloat(paymentDetails.amount) <= 0) {
       newErrors.amount = 'Amount must be greater than 0';
+    }
+
+    // Validate amount matches invoice amount
+    if (selectedInvoice) {
+      const invoiceAmount = selectedInvoice.totalAmount;
+      const paymentAmount = parseFloat(paymentDetails.amount);
+      if (Math.abs(paymentAmount - invoiceAmount) > 0.01) {
+        newErrors.amount = `Amount must match invoice amount (LKR ${invoiceAmount.toFixed(2)})`;
+      }
     }
 
     if (paymentDetails.method !== 'Cash' && !paymentDetails.transactionRef.trim()) {
@@ -60,7 +83,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [paymentDetails]);
+  }, [paymentDetails, selectedInvoice]);
 
   const handleMethodChange = (method: any) => {
     const updated: PaymentDetails = { ...paymentDetails, method };
@@ -99,8 +122,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <p className="text-gray-200 font-medium">{selectedInvoice.invoiceId}</p>
               </div>
               <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wide">Status</p>
+                <p className={`font-semibold ${selectedInvoice.paymentStatus === 'Completed' ? 'text-green-400' :
+                    selectedInvoice.paymentStatus === 'Pending' ? 'text-yellow-400' : 'text-red-400'
+                  }`}>
+                  {selectedInvoice.paymentStatus}
+                </p>
+              </div>
+              <div>
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Amount</p>
                 <p className="text-blue-400 font-semibold">LKR {selectedInvoice.totalAmount.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wide">Due Date</p>
+                <p className="text-gray-200 font-medium">
+                  {new Date(selectedInvoice.dueDate).toLocaleDateString()}
+                </p>
               </div>
               <div className="col-span-2">
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Customer</p>
@@ -130,9 +167,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Bank Details - Conditional */}
           {['Bank Transfer', 'Bank Deposit', 'Cheque'].includes(paymentDetails.method) && (
             <>
-              <FormField 
-                label="Bank Name" 
-                required 
+              <FormField
+                label="Bank Name"
+                required
                 error={errors.bankName}
                 hint="Name of the bank"
               >
@@ -144,9 +181,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 />
               </FormField>
 
-              <FormField 
-                label="Account Number" 
-                required 
+              <FormField
+                label="Account Number"
+                required
                 error={errors.accountNumber}
                 hint="Bank account number"
               >
@@ -162,9 +199,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           {/* Transaction Reference */}
           {paymentDetails.method !== 'Cash' && (
-            <FormField 
-              label="Transaction Reference" 
-              required 
+            <FormField
+              label="Transaction Reference"
+              required
               error={errors.transactionRef}
               hint={paymentDetails.method === 'Card' ? 'Card transaction ID' : 'Reference/Cheque number'}
             >
@@ -178,9 +215,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {/* Transaction Date */}
-          <FormField 
-            label="Transaction Date" 
-            required 
+          <FormField
+            label="Transaction Date"
+            required
             error={errors.transactionDate}
             hint="Date when payment was made"
           >
@@ -193,9 +230,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </FormField>
 
           {/* Amount */}
-          <FormField 
-            label="Amount (LKR)" 
-            required 
+          <FormField
+            label="Amount (LKR)"
+            required
             error={errors.amount}
             hint="Payment amount in Sri Lankan Rupees"
           >
@@ -238,8 +275,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             fullWidth
             onClick={handleSubmit}
             isLoading={isProcessing}
+            disabled={isProcessing}
           >
-            Confirm Payment
+            {isProcessing ? 'Processing...' : 'Confirm Payment'}
           </Button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { FileText, Download, AlertCircle } from 'lucide-react';
+import { FileText, Download, AlertCircle, Printer } from 'lucide-react';
 import { Modal, Button, LoadingSpinner } from './common';
 import InvoiceCanvas from './InvoiceCanvas';
 import html2canvas from 'html2canvas';
@@ -10,37 +10,54 @@ interface InvoiceViewModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedInvoice: InvoiceResponse | null;
+  onDownloadInvoice: (invoice: InvoiceResponse) => Promise<void>;
+  isGeneratingPDF: boolean;
 }
 
 export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
   isOpen,
   onClose,
-  selectedInvoice
+  selectedInvoice,
+  onDownloadInvoice,
+  isGeneratingPDF
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [error, setError] = useState<string>('');
 
-  const generatePDFFromView = async () => {
+  const handlePrint = async () => {
     if (!selectedInvoice || !invoiceRef.current) return;
 
     try {
-      setIsGeneratingPDF(true);
       setError('');
-
+      
       const invoiceContainer = invoiceRef.current;
+      const originalTransform = invoiceContainer.style.transform;
+      const originalTransformOrigin = invoiceContainer.style.transformOrigin;
       const originalWidth = invoiceContainer.style.width;
       const originalHeight = invoiceContainer.style.height;
-      const originalBackground = invoiceContainer.style.background;
 
-      // A4 size for PDF generation
-      invoiceContainer.style.width = '794px';
-      invoiceContainer.style.height = '1123px';
-      invoiceContainer.style.background = 'white';
-      invoiceContainer.style.padding = '0';
-      invoiceContainer.style.margin = '0';
+      invoiceContainer.style.transform = 'none';
+      invoiceContainer.style.transformOrigin = 'top left';
+      invoiceContainer.style.width = '210mm';
+      invoiceContainer.style.height = '297mm';
+      invoiceContainer.style.position = 'fixed';
+      invoiceContainer.style.left = '0';
+      invoiceContainer.style.top = '0';
+      invoiceContainer.style.zIndex = '9999';
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      void invoiceContainer.offsetHeight;
+
+      const images = invoiceContainer.getElementsByTagName('img');
+      const imageLoadPromises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+
+      await Promise.all(imageLoadPromises);
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const canvas = await html2canvas(invoiceContainer, {
         scale: 2,
@@ -52,29 +69,106 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
         height: 1123,
       });
 
+      invoiceContainer.style.transform = originalTransform;
+      invoiceContainer.style.transformOrigin = originalTransformOrigin;
       invoiceContainer.style.width = originalWidth;
       invoiceContainer.style.height = originalHeight;
-      invoiceContainer.style.background = originalBackground;
+      invoiceContainer.style.position = '';
+      invoiceContainer.style.left = '';
+      invoiceContainer.style.top = '';
+      invoiceContainer.style.zIndex = '';
 
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
+      const imageData = canvas.toDataURL('image/png', 1.0);
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setError("Popup blocked! Please allow popups for this site to print.");
+        return;
+      }
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-      pdf.save('invoice-' + selectedInvoice.invoiceId + '.pdf');
+      const printHtml = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Invoice ${selectedInvoice.invoiceId}</title>
+            <style>
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+              
+              body {
+                margin: 0;
+                padding: 0;
+                width: 210mm;
+                height: 297mm;
+              }
+              
+              .print-container {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              
+              .invoice-image {
+                width: 210mm;
+                height: 297mm;
+                object-fit: contain;
+              }
+              
+              @media print {
+                body {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                
+                .print-container {
+                  page-break-inside: avoid;
+                  page-break-after: avoid;
+                }
+                
+                .invoice-image {
+                  page-break-inside: avoid;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              <img src="${imageData}" alt="Invoice ${selectedInvoice.invoiceId}" class="invoice-image" />
+            </div>
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                  setTimeout(function() {
+                    window.close();
+                  }, 1000);
+                }, 500);
+              };
+              
+              setTimeout(function() {
+                window.print();
+                setTimeout(function() {
+                  window.close();
+                }, 1000);
+              }, 2000);
+            </script>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(printHtml);
+      printWindow.document.close();
+      printWindow.focus();
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);
-      console.error('Error generating PDF:', err);
-    } finally {
-      setIsGeneratingPDF(false);
+      console.error('Error printing invoice:', err);
     }
   };
 
@@ -88,22 +182,34 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
       className="!h-[90vh] flex flex-col"
     >
       <div className="flex-1 flex flex-col gap-4">
-        {/* PDF Download Button */}
+        {/* Action Buttons */}
         <div className="flex justify-between items-center gap-3">
           <p className="text-sm text-gray-400">
             Invoice details displayed below
           </p>
-          <Button
-            variant="primary"
-            size="md"
-            icon={<Download className="w-4 h-4" />}
-            onClick={generatePDFFromView}
-            isLoading={isGeneratingPDF}
-            disabled={isGeneratingPDF}
-          >
-            <span className="hidden sm:inline">Download PDF</span>
-            <span className="sm:hidden">PDF</span>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="md"
+              icon={<Printer className="w-4 h-4" />}
+              onClick={handlePrint}
+              disabled={isGeneratingPDF || !selectedInvoice}
+            >
+              <span className="hidden sm:inline">Print</span>
+              <span className="sm:hidden">Print</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Download className="w-4 h-4" />}
+              onClick={() => selectedInvoice && onDownloadInvoice(selectedInvoice)}
+              isLoading={isGeneratingPDF}
+              disabled={isGeneratingPDF || !selectedInvoice}
+            >
+              <span className="hidden sm:inline">Download PDF</span>
+              <span className="sm:hidden">PDF</span>
+            </Button>
+          </div>
         </div>
 
         {/* Error Alert */}
@@ -140,7 +246,7 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
                       items: selectedInvoice.items.map(item => ({
                         id: item._id || Date.now().toString(),
                         item: item.item?._id || "",
-                        itemName: item.item?.itemName || item.item?.description || "Item",
+                        itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
                         quantity: item.quantity,
                         unitPrice: item.unitPrice,
                         total: item.total,

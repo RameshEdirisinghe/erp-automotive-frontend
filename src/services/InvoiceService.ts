@@ -32,38 +32,33 @@ export const invoiceService = {
     try {
       const response = await api.get<InvoiceResponse[]>("/invoices");
       return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error('Error fetching invoices:', error.message);
-        if (error.message.includes('401')) {
-          window.location.href = '/login';
-        }
-        throw new Error(error.message);
+    } catch (error: any) {
+      console.error('Error fetching invoices:', error.response?.data || error.message);
+      if (error.response?.status === 401) {
+        window.location.href = '/login';
       }
-      throw new Error("Failed to fetch invoices");
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch invoices");
     }
   },
 
   // Get all customers
-  async getAllCustomers(): Promise<InvoiceCustomer[]> {
-    try {
-      const response = await api.get<InvoiceCustomer[]>("/customers");
-      return response.data;
-    } catch (error: unknown) {
-      console.error('Error fetching customers:', error);
-      return [];
-    }
-  },
+async getAllCustomers(): Promise<InvoiceCustomer[]> {
+  try {
+    const response = await api.get<InvoiceCustomer[]>("/customers");
+    return response.data;
+  } catch (error: unknown) {
+    console.error('Error fetching customers:', error);
+    return [];
+  }
+},
 
   // Get next invoice ID
   async getNextId(): Promise<string> {
     try {
       const response = await api.get<NextInvoiceIdResponse>("/invoices/next-id");
       return response.data.nextInvoiceId;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "Failed to fetch next invoice ID";
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || "Failed to fetch next invoice ID";
       throw new Error(errorMessage);
     }
   },
@@ -73,10 +68,8 @@ export const invoiceService = {
     try {
       const response = await api.get<InvoiceResponse>(`/invoices/${id}`);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : `Failed to fetch invoice ${id}`;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Failed to fetch invoice ${id}`;
       throw new Error(errorMessage);
     }
   },
@@ -86,10 +79,8 @@ export const invoiceService = {
     try {
       const response = await api.get<InvoiceResponse>(`/invoices/invoice-id/${invoiceId}`);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : `Failed to fetch invoice ${invoiceId}`;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Failed to fetch invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
@@ -97,12 +88,12 @@ export const invoiceService = {
   // Create new invoice
   async create(invoiceData: BackendInvoiceData): Promise<InvoiceResponse> {
     try {
+      console.log('Sending invoice data:', JSON.stringify(invoiceData, null, 2));
       const response = await api.post<InvoiceResponse>("/invoices", invoiceData);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "Failed to create invoice";
+    } catch (error: any) {
+      console.error('Error creating invoice:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.message || error.message || "Failed to create invoice";
       throw new Error(errorMessage);
     }
   },
@@ -112,10 +103,8 @@ export const invoiceService = {
     try {
       const response = await api.put<InvoiceResponse>(`/invoices/${invoiceId}`, updateData);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : `Failed to update invoice ${invoiceId}`;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Failed to update invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
@@ -125,10 +114,8 @@ export const invoiceService = {
     try {
       const response = await api.put<InvoiceResponse>(`/invoices/${invoiceId}/payment-status`, { paymentStatus });
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : `Failed to update payment status for invoice ${invoiceId}`;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Failed to update payment status for invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
@@ -138,10 +125,8 @@ export const invoiceService = {
     try {
       const response = await api.delete<DeleteInvoiceResponse>(`/invoices/${invoiceId}`);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : `Failed to delete invoice ${invoiceId}`;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Failed to delete invoice ${invoiceId}`;
       throw new Error(errorMessage);
     }
   },
@@ -162,10 +147,8 @@ export const invoiceService = {
     try {
       const response = await api.post("/customers", customerData);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "Failed to create customer";
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || "Failed to create customer";
       throw new Error(errorMessage);
     }
   },
@@ -175,10 +158,8 @@ export const invoiceService = {
     try {
       const response = await api.put(`/customers/${customerId}`, customerData);
       return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "Failed to update customer";
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || "Failed to update customer";
       throw new Error(errorMessage);
     }
   }

@@ -73,8 +73,7 @@ export interface InvoiceData {
 }
 
 export interface BackendInvoiceData {
-  _id?: string;
-  invoiceId?: string;
+  invoiceId: string;
   customer: string;
   items: Array<{
     item: string;
@@ -87,11 +86,12 @@ export interface BackendInvoiceData {
   totalAmount: number;
   paymentStatus: PaymentStatusType;
   paymentMethod: PaymentMethodType;
-  bankDepositDate?: string;
+  vehicleNumber: string;
   issueDate: string;
   dueDate: string;
-  vehicleNumber: string;
   notes?: string;
+  bankDepositDate?: string;
+  _id?: string;
 }
 
 export interface InvoiceResponse {
