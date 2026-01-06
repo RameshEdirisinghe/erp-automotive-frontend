@@ -28,7 +28,6 @@ const Finance: React.FC = () => {
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceResponse | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceView, setShowInvoiceView] = useState(false);
@@ -79,14 +78,11 @@ const Finance: React.FC = () => {
   // Load finance transactions
   const loadFinanceTransactions = async () => {
     try {
-      setLoadingTransactions(true);
       const transactions = await financeService.getAll();
       setFinanceTransactions(transactions);
       console.log('Loaded finance transactions:', transactions);
     } catch (error) {
       console.error('Error loading finance transactions:', error);
-    } finally {
-      setLoadingTransactions(false);
     }
   };
 
