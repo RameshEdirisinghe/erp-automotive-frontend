@@ -27,7 +27,8 @@ import type {
   BackendInvoiceData,
   PaymentStatusType,
   PaymentMethodType,
-  InvoiceCustomer
+  InvoiceCustomer,
+  InvoiceResponse
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
@@ -264,10 +265,10 @@ const Invoice: React.FC = () => {
   }, [isDirty]);
 
   const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
-  
+
     const formatDateToISO = (dateString: string): string => {
       if (!dateString) return new Date().toISOString();
-     
+
       if (!dateString.includes('T')) {
         return new Date(dateString + 'T00:00:00.000Z').toISOString();
       }
@@ -297,7 +298,7 @@ const Invoice: React.FC = () => {
     if (data.notes && data.notes.trim()) {
       backendData.notes = data.notes;
     }
-    
+
     if (data.bankDepositDate && data.bankDepositDate.trim()) {
       backendData.bankDepositDate = formatDateToISO(data.bankDepositDate);
     }
@@ -412,10 +413,8 @@ const Invoice: React.FC = () => {
       setIsSaving(true);
 
       const backendData = prepareInvoiceForSave(invoiceData);
-      console.log('Saving invoice data:', JSON.stringify(backendData, null, 2));
+      let response: InvoiceResponse;
 
-      let response;
-      
       if (invoiceData._id) {
         setAlert({
           type: 'info',
@@ -454,7 +453,7 @@ const Invoice: React.FC = () => {
       return true;
     } catch (error: any) {
       console.error('Error saving invoice:', error);
-      
+
       let errorMessage = 'Failed to save invoice';
       if (error.response) {
         // Server responded with error
@@ -470,7 +469,7 @@ const Invoice: React.FC = () => {
       } else {
         errorMessage = error.message || 'Failed to save invoice';
       }
-      
+
       setAlert({
         type: 'error',
         message: errorMessage
@@ -484,7 +483,7 @@ const Invoice: React.FC = () => {
   const fetchAllInvoices = async () => {
     try {
       setIsLoadingInvoices(true);
-      
+
       // Fetch all customers
       try {
         const customers = await invoiceService.getAllCustomers();
@@ -495,20 +494,20 @@ const Invoice: React.FC = () => {
 
       // Fetch all invoices
       const invoices = await invoiceService.getAll();
-      
+
       // Sort invoices
       const sortedInvoices = [...invoices].sort((a, b) => {
         const dateA = new Date(a.created_at || a.issueDate).getTime();
         const dateB = new Date(b.created_at || b.issueDate).getTime();
         return dateB - dateA;
       });
-      
+
       // Map invoices with customer details
       const normalized = sortedInvoices.map((invoice: any) => {
         // Extract customer details
         let customer = invoice.customer;
         let customerName = '';
-        
+
         if (typeof customer === 'object' && customer !== null) {
           customerName = customer.fullName || customer.name || '';
         } else if (typeof customer === 'string') {
@@ -543,7 +542,7 @@ const Invoice: React.FC = () => {
           updated_at: invoice.updated_at
         } as BackendInvoiceData & { customerName: string };
       });
-      
+
       setAllInvoices(normalized);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -559,36 +558,33 @@ const Invoice: React.FC = () => {
   // Helper function to get customer name for display
   const getCustomerDisplay = (invoice: any): string => {
     if (!invoice) return 'Unknown Customer';
-    
+
     if (invoice.customerName) {
       return invoice.customerName;
     }
-    
+
     if (typeof invoice.customer === 'object' && invoice.customer !== null) {
       return invoice.customer.fullName || invoice.customer.name || 'Unknown Customer';
     }
-    
+
     if (typeof invoice.customer === 'string' && allCustomers.length > 0) {
       const foundCustomer = allCustomers.find(c => c._id === invoice.customer);
       if (foundCustomer) {
         return foundCustomer.fullName || 'Unknown Customer';
       }
     }
-    
+
     return 'Unknown Customer';
   };
 
   const handleLoadInvoice = async (invoiceData: any, mode: 'view' | 'edit') => {
     try {
-      console.log('Loading invoice:', invoiceData);
-      
       // Fetch full invoice details
       let fullInvoiceData = invoiceData;
       if (invoiceData._id) {
         try {
           const response = await invoiceService.getById(invoiceData._id);
           fullInvoiceData = response as any;
-          console.log('Fetched full invoice:', fullInvoiceData);
         } catch (fetchError) {
           console.warn('Could not fetch full invoice details, using summary data:', fetchError);
         }
@@ -623,7 +619,7 @@ const Invoice: React.FC = () => {
       if (typeof fullInvoiceData.customer === 'object' && fullInvoiceData.customer !== null) {
         customerDetails = fullInvoiceData.customer;
       } else if (typeof fullInvoiceData.customer === 'string') {
-        
+
         const foundCustomer = allCustomers.find(c => c._id === fullInvoiceData.customer);
         if (foundCustomer) {
           customerDetails = foundCustomer;
@@ -633,8 +629,8 @@ const Invoice: React.FC = () => {
       const loadedData: InvoiceData = {
         _id: fullInvoiceData._id,
         invoiceId: fullInvoiceData.invoiceId,
-        customer: typeof fullInvoiceData.customer === 'object' 
-          ? (fullInvoiceData.customer as any)?._id || '' 
+        customer: typeof fullInvoiceData.customer === 'object'
+          ? (fullInvoiceData.customer as any)?._id || ''
           : fullInvoiceData.customer || '',
         customerDetails: customerDetails,
         items: mappedItems,
@@ -652,18 +648,16 @@ const Invoice: React.FC = () => {
         created_at: fullInvoiceData.created_at,
         updated_at: fullInvoiceData.updated_at
       };
-
-      console.log('Loaded invoice data:', loadedData);
       
       setInvoiceData(loadedData);
-      
+
       lastSavedRef.current = loadedData;
       setIsDirty(false);
       lastSavedAtRef.current = new Date().toISOString();
 
       setViewMode('edit');
       setActivePanel('form');
-      
+
       setAlert({
         type: 'success',
         message: `Invoice ${fullInvoiceData.invoiceId} loaded successfully`
@@ -726,7 +720,7 @@ const Invoice: React.FC = () => {
       return idMatch || customerMatch;
     })
     : allInvoices;
-    
+
   const filteredTotalPages = Math.max(1, Math.ceil(filteredInvoices.length / itemsPerPage));
   const currentInvoices = filteredInvoices.slice(startIndex, Math.min(endIndex, filteredInvoices.length));
 
@@ -1166,7 +1160,7 @@ const Invoice: React.FC = () => {
                       {/* Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse text-sm">
-                          
+
                           <thead className="sticky top-0 z-10">
                             <tr className="bg-[#0b1220] border-b border-[#243244]">
                               <th className="text-left px-4 py-3 font-semibold text-gray-300">

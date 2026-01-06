@@ -163,13 +163,12 @@ const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ isOpe
 };
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  const statusMap: Record<string, { bg: string; text: string; dot: string; label?: string }> = {
-    Completed: { bg: "bg-green-500/20 border-green-500/30", text: "text-green-400", dot: "bg-green-400", label: "Paid" },
+  const statusMap: Record<string, { bg: string; text: string; dot: string }> = {
+    Completed: { bg: "bg-green-500/20 border-green-500/30", text: "text-green-400", dot: "bg-green-400" },
     Pending: { bg: "bg-yellow-500/20 border-yellow-500/30", text: "text-yellow-400", dot: "bg-yellow-400" },
     Rejected: { bg: "bg-red-500/20 border-red-500/30", text: "text-red-400", dot: "bg-red-400" },
-    Default: { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" },
   };
-  const { bg, text, dot, label } = statusMap[status] || statusMap.Default;
+  const { bg, text, dot } = statusMap[status] || { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" };
   return (
     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${bg} ${text} border`}>
       <span className={`w-2 h-2 rounded-full ${dot}`} />
@@ -180,7 +179,6 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 const FinanceTable: React.FC<FinanceTableProps> = ({
   invoices,
-  loading,
   onViewInvoice,
   onDownloadInvoice,
   onMarkAsPaid,
@@ -342,7 +340,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
                             </Button>
                           ) : hasTransaction ? (
                             <Button
-                              variant="success"
+                              variant="primary"
                               size="sm"
                               icon={<CheckCircle className="w-3 h-3" />}
                               onClick={() => handlePaidClick(invoice)}
@@ -398,7 +396,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
           )}
         </div>
 
-        {/* Tablet View */}
+        {/* Tablet View (768px - 1023px) */}
         <div className="hidden md:block lg:hidden">
           <div className="grid grid-cols-1 gap-3">
             {paginatedInvoices.map((invoice) => {
@@ -482,7 +480,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
                       </Button>
                     ) : hasTransaction ? (
                       <Button
-                        variant="success"
+                        variant="primary"
                         size="sm"
                         icon={<CheckCircle className="w-3 h-3" />}
                         onClick={() => handlePaidClick(invoice)}
@@ -532,7 +530,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
           </div>
         </div>
 
-        {/* Mobile Cards */}
+        {/* Mobile Cards (below 768px) */}
         <div className="md:hidden space-y-3">
           {paginatedInvoices.map((invoice) => {
             const transaction = getTransactionForInvoice(invoice.invoiceId);
@@ -621,7 +619,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
                     </Button>
                   ) : hasTransaction ? (
                     <Button
-                      variant="success"
+                      variant="primary"
                       size="sm"
                       icon={<CheckCircle className="w-3 h-3" />}
                       onClick={() => handlePaidClick(invoice)}

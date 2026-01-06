@@ -28,6 +28,8 @@ export const financeService = {
   async getNextId(): Promise<string> {
     try {
       const response = await api.get<NextTransactionIdResponse>("/finance/next-id");
+      console.log(response.data.nextTransactionId);
+      
       return response.data.nextTransactionId;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
