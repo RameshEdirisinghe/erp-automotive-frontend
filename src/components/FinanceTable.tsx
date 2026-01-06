@@ -82,9 +82,8 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
               {paginatedInvoices.map((invoice, idx) => (
                 <tr
                   key={invoice._id}
-                  className={`border-b border-[#334155]/50 transition-colors hover:bg-[#1e293b]/50 ${
-                    idx % 2 === 0 ? "bg-[#1e293b]/30" : "bg-[#1e293b]/10"
-                  }`}
+                  className={`border-b border-[#334155]/50 transition-colors hover:bg-[#1e293b]/50 ${idx % 2 === 0 ? "bg-[#1e293b]/30" : "bg-[#1e293b]/10"
+                    }`}
                 >
                   <td className="py-4 px-6">
                     <div className="flex flex-col">
@@ -117,9 +116,9 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
                         aria-label="Download Invoice"
                       />
                       {invoice.paymentStatus === "Pending" || invoice.paymentStatus === "Rejected" ? (
-                        <Button 
-                          variant="primary" 
-                          size="sm" 
+                        <Button
+                          variant="primary"
+                          size="sm"
                           onClick={() => onMarkAsPaid(invoice)}
                           className="bg-green-600 hover:bg-green-700"
                         >
