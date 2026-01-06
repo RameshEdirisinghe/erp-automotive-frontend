@@ -1,29 +1,449 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
-import { User, DollarSign } from "lucide-react";
+import FinanceTable from "../components/FinanceTable";
+import SearchFilterBar from "../components/SearchFilterBar";
+import PaymentModal from "../components/PaymentModal";
+import InvoiceViewModal from "../components/InvoiceViewModal";
+import { LoadingSpinner } from "../components/common";
+import { DollarSign, User } from "lucide-react";
+import type { InvoiceResponse } from "../types/invoice";
+import type { FinancePaymentData } from "../types/finance";
+import { invoiceService } from "../services/InvoiceService";
+import { financeService } from "../services/FinanceService";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import CustomAlert from "../components/CustomAlert";
+import type { AlertType } from "../components/CustomAlert";
+import CustomConfirm from "../components/CustomConfirm";
+import InvoiceCanvas from "../components/InvoiceCanvas";
 
 const Finance: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [filterConfig, setFilterConfig] = useState({
+    searchQuery: "",
+    selectedField: "All Fields",
+    startDate: "",
+    endDate: ""
+  });
+  const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceResponse | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showInvoiceView, setShowInvoiceView] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "warning" | "danger" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: "",
+    onConfirm: () => { },
+  });
+  
+  const invoiceRef = useRef<HTMLDivElement>(null);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: "Bank Transfer" as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  // Load invoices from backend
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const data = await invoiceService.getAll();
+      setInvoices(data);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load invoices. Please try again.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  const handleMarkAsPaid = (invoice: InvoiceResponse) => {
+    setSelectedInvoice(invoice);
+    setPaymentDetails({
+      method: "Bank Transfer",
+      bankName: "",
+      accountNumber: "",
+      transactionRef: "",
+      amount: invoice.totalAmount.toFixed(2),
+      transactionDate: new Date().toISOString().split('T')[0]
+    });
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedInvoice) return;
+
+    try {
+      setIsProcessingPayment(true);
+
+      // First get the next transaction ID
+      const transactionId = await financeService.getNextId();
+
+      // Prepare payment data
+      const paymentData: FinancePaymentData = {
+        transactionId: transactionId,
+        transactionDate: new Date(paymentDetails.transactionDate).toISOString(),
+        paymentMethod: {
+          type: paymentDetails.method,
+          bankName: paymentDetails.bankName || 'N/A',
+          accountNumber: paymentDetails.accountNumber || 'N/A',
+          transactionRef: paymentDetails.transactionRef || 'PAY-' + Date.now(),
+        },
+        invoice: {
+          invoiceId: selectedInvoice.invoiceId,
+        },
+        amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
+      };
+
+      // Create finance transaction
+      await financeService.create(paymentData);
+
+      // Update invoice payment status to "Completed"
+      await invoiceService.updatePaymentStatus(selectedInvoice._id, 'Completed');
+
+      setAlert({
+        type: 'success',
+        message: 'Payment successfully recorded for invoice ' + selectedInvoice.invoiceId
+      });
+
+      // Refresh invoices list to update status
+      await loadInvoices();
+
+      // Reset form
+      setShowPaymentModal(false);
+      setPaymentDetails({
+        method: "Bank Transfer",
+        bankName: "",
+        accountNumber: "",
+        transactionRef: "",
+        amount: "",
+        transactionDate: new Date().toISOString().split('T')[0]
+      });
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to process payment. Please try again.';
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleViewInvoice = (invoice: InvoiceResponse) => {
+    setSelectedInvoice(invoice);
+    setShowInvoiceView(true);
+  };
+
+  const handleDownloadInvoice = async (invoice: InvoiceResponse) => {
+    if (!invoice) return;
+
+    const proceedWithDownload = async () => {
+      try {
+        setIsGeneratingPDF(true);
+        setAlert({
+          type: 'info',
+          message: 'Generating PDF... Please wait.'
+        });
+
+        // Create a temporary container for the invoice
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'fixed';
+        tempContainer.style.left = '0';
+        tempContainer.style.top = '0';
+        tempContainer.style.width = '210mm';
+        tempContainer.style.height = '297mm';
+        tempContainer.style.backgroundColor = 'white';
+        tempContainer.style.zIndex = '9999';
+        tempContainer.style.opacity = '0';
+        document.body.appendChild(tempContainer);
+
+        // Render the InvoiceCanvas
+        const invoiceData = {
+          invoiceId: invoice.invoiceId,
+          customer: invoice.customer?._id || "",
+          customerDetails: invoice.customer,
+          items: invoice.items.map(item => ({
+            id: item._id || Date.now().toString(),
+            item: item.item?._id || "",
+            itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+          })),
+          subTotal: invoice.subTotal,
+          discount: invoice.discount,
+          discountPercentage: invoice.discount > 0 ? (invoice.discount / invoice.subTotal) * 100 : 0,
+          totalAmount: invoice.totalAmount,
+          paymentStatus: invoice.paymentStatus,
+          paymentMethod: invoice.paymentMethod,
+          bankDepositDate: invoice.bankDepositDate,
+          issueDate: invoice.issueDate,
+          dueDate: invoice.dueDate,
+          vehicleNumber: invoice.vehicleNumber,
+          notes: invoice.notes,
+        };
+
+        // Temporarily render the invoice
+        const { createRoot } = await import('react-dom/client');
+        const root = createRoot(tempContainer);
+        
+        root.render(
+          <div 
+            ref={invoiceRef}
+            style={{
+              width: '210mm',
+              minHeight: '297mm',
+              backgroundColor: 'white',
+              padding: '20mm',
+              boxSizing: 'border-box'
+            }}
+          >
+            <InvoiceCanvas invoiceData={invoiceData} />
+          </div>
+        );
+
+        // Wait for rendering
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const invoiceElement = tempContainer.firstChild as HTMLElement;
+        if (!invoiceElement) throw new Error('Invoice element not found');
+
+        // Generate PDF
+        const canvas = await html2canvas(invoiceElement, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+        });
+
+        const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+        const imgWidth = pdfWidth;
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
+
+        pdf.addImage(jpegData, 'JPEG', 0, 0, imgWidth, finalHeight);
+        pdf.save(`invoice-${invoice.invoiceId}.pdf`);
+
+        // Cleanup
+        root.unmount();
+        document.body.removeChild(tempContainer);
+
+        setAlert({
+          type: 'success',
+          message: 'PDF downloaded successfully!'
+        });
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
+        });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!invoice._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Invoice First",
+        message: "This invoice needs to be saved before downloading. Save now?",
+        confirmText: "Save & Download",
+        onConfirm: async () => {
+          try {
+            // Update payment status if pending
+            if (invoice.paymentStatus === 'Pending') {
+              await invoiceService.updatePaymentStatus(invoice._id, 'Completed');
+              await loadInvoices();
+            }
+            await proceedWithDownload();
+          } catch (error) {
+            setAlert({
+              type: 'error',
+              message: 'Failed to save invoice before download'
+            });
+          }
+        }
+      });
+      return;
+    }
+
+    await proceedWithDownload();
+  };
+
+  // Filter invoices based on search and date range
+  const filteredInvoices = invoices.filter(invoice => {
+    const query = filterConfig.searchQuery.toLowerCase();
+    const matchesSearch = 
+      invoice.invoiceId.toLowerCase().includes(query) ||
+      invoice.customer?.fullName?.toLowerCase().includes(query) ||
+      (invoice.vehicleNumber && invoice.vehicleNumber.toLowerCase().includes(query)) ||
+      invoice.totalAmount.toString().includes(query);
+
+    if (!matchesSearch) return false;
+
+    // Date range filtering
+    if (filterConfig.startDate || filterConfig.endDate) {
+      const invoiceDate = new Date(invoice.issueDate);
+      
+      if (filterConfig.startDate) {
+        const start = new Date(filterConfig.startDate);
+        start.setHours(0, 0, 0, 0);
+        if (invoiceDate < start) return false;
+      }
+      
+      if (filterConfig.endDate) {
+        const end = new Date(filterConfig.endDate);
+        end.setHours(23, 59, 59, 999);
+        if (invoiceDate > end) return false;
+      }
+    }
+
+    // Field filtering
+    if (filterConfig.selectedField !== "All Fields" && filterConfig.searchQuery.trim() !== "") {
+      switch (filterConfig.selectedField) {
+        case "Invoice ID":
+          return invoice.invoiceId.toLowerCase().includes(filterConfig.searchQuery.toLowerCase());
+        case "Customer Name":
+          return invoice.customer?.fullName?.toLowerCase().includes(filterConfig.searchQuery.toLowerCase());
+        case "Status":
+          return invoice.paymentStatus.toLowerCase().includes(filterConfig.searchQuery.toLowerCase());
+        default:
+          return true;
+      }
+    }
+
+    return true;
+  });
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
-      <div className="flex-1 flex flex-col">
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {alert && (
+          <CustomAlert
+            type={alert.type}
+            message={alert.message}
+            onClose={() => setAlert(null)}
+            duration={3000}
+          />
+        )}
+
+        <CustomConfirm
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmText={confirmConfig.confirmText}
+          cancelText={confirmConfig.cancelText}
+          type={confirmConfig.type}
+          onConfirm={() => {
+            confirmConfig.onConfirm();
+            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          }}
+          onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        />
+
+        {/* Header */}
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 sm:px-6 shadow-lg">
           <div className="flex items-center gap-3">
             <DollarSign className="text-blue-400 w-6 h-6" />
-            <h1 className="text-xl font-semibold text-gray-200">Financial Management</h1>
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-200">Finance</h1>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
+            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition-colors">
               <User className="text-gray-200 w-5 h-5" />
             </div>
           </div>
         </div>
 
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* Search and Filters */}
+          <div className="mb-8 bg-[#1e293b] border border-[#334155] rounded-lg p-4 sm:p-6">
+            <SearchFilterBar
+              config={filterConfig}
+              onSearchChange={(query) => setFilterConfig({ ...filterConfig, searchQuery: query })}
+              onFieldChange={(field) => setFilterConfig({ ...filterConfig, selectedField: field })}
+              onDateRangeChange={(dates) => setFilterConfig({ ...filterConfig, ...dates })}
+            />
+          </div>
+
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex items-center justify-center h-96">
+              <LoadingSpinner size="lg" text="Loading invoices..." />
+            </div>
+          ) : (
+            /* Invoices Table */
+            <FinanceTable
+              invoices={filteredInvoices}
+              loading={false}
+              onViewInvoice={handleViewInvoice}
+              onDownloadInvoice={handleDownloadInvoice}
+              onMarkAsPaid={handleMarkAsPaid}
+            />
+          )}
+        </div>
       </div>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        selectedInvoice={selectedInvoice}
+        paymentDetails={paymentDetails}
+        onPaymentDetailsChange={setPaymentDetails}
+        onSubmit={handlePaymentSubmit}
+        isProcessing={isProcessingPayment}
+      />
+
+      {/* Invoice View Modal */}
+      <InvoiceViewModal
+        isOpen={showInvoiceView}
+        onClose={() => setShowInvoiceView(false)}
+        selectedInvoice={selectedInvoice}
+        onDownloadInvoice={handleDownloadInvoice}
+        isGeneratingPDF={isGeneratingPDF}
+      />
     </div>
   );
 };
