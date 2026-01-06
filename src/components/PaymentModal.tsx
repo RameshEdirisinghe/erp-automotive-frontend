@@ -45,6 +45,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       newErrors.amount = 'Amount must be greater than 0';
     }
 
+    // Validate amount matches invoice amount
+    if (selectedInvoice) {
+      const invoiceAmount = selectedInvoice.totalAmount;
+      const paymentAmount = parseFloat(paymentDetails.amount);
+      if (Math.abs(paymentAmount - invoiceAmount) > 0.01) {
+        newErrors.amount = `Amount must match invoice amount (LKR ${invoiceAmount.toFixed(2)})`;
+      }
+    }
+
     if (paymentDetails.method !== 'Cash' && !paymentDetails.transactionRef.trim()) {
       newErrors.transactionRef = 'Transaction reference is required';
     }
@@ -60,7 +69,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [paymentDetails]);
+  }, [paymentDetails, selectedInvoice]);
 
   const handleMethodChange = (method: any) => {
     const updated: PaymentDetails = { ...paymentDetails, method };
@@ -99,8 +108,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <p className="text-gray-200 font-medium">{selectedInvoice.invoiceId}</p>
               </div>
               <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wide">Status</p>
+                <p className={`font-semibold ${
+                  selectedInvoice.paymentStatus === 'Completed' ? 'text-green-400' :
+                  selectedInvoice.paymentStatus === 'Pending' ? 'text-yellow-400' : 'text-red-400'
+                }`}>
+                  {selectedInvoice.paymentStatus}
+                </p>
+              </div>
+              <div>
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Amount</p>
                 <p className="text-blue-400 font-semibold">LKR {selectedInvoice.totalAmount.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wide">Due Date</p>
+                <p className="text-gray-200 font-medium">
+                  {new Date(selectedInvoice.dueDate).toLocaleDateString()}
+                </p>
               </div>
               <div className="col-span-2">
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Customer</p>
@@ -238,8 +262,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             fullWidth
             onClick={handleSubmit}
             isLoading={isProcessing}
+            disabled={isProcessing}
           >
-            Confirm Payment
+            {isProcessing ? 'Processing...' : 'Confirm Payment'}
           </Button>
         </div>
       </div>

@@ -9,21 +9,21 @@ interface FinanceTableProps {
   onViewInvoice: (invoice: InvoiceResponse) => void;
   onDownloadInvoice: (invoice: InvoiceResponse) => void;
   onMarkAsPaid: (invoice: InvoiceResponse) => void;
-  pageSize?: number; // optional, default 10
+  pageSize?: number;
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const statusMap: Record<string, { bg: string; text: string; dot: string; label?: string }> = {
     Completed: { bg: "bg-green-500/20 border-green-500/30", text: "text-green-400", dot: "bg-green-400", label: "Paid" },
     Pending: { bg: "bg-yellow-500/20 border-yellow-500/30", text: "text-yellow-400", dot: "bg-yellow-400" },
-    Overdue: { bg: "bg-red-500/20 border-red-500/30", text: "text-red-400", dot: "bg-red-400" },
+    Rejected: { bg: "bg-red-500/20 border-red-500/30", text: "text-red-400", dot: "bg-red-400" },
     Default: { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" },
   };
   const { bg, text, dot, label } = statusMap[status] || statusMap.Default;
   return (
     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${bg} ${text} border`}>
       <span className={`w-2 h-2 rounded-full ${dot}`} />
-      {label || status}
+      {status}
     </span>
   );
 };
@@ -116,13 +116,18 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
                         onClick={() => onDownloadInvoice(invoice)}
                         aria-label="Download Invoice"
                       />
-                      {invoice.paymentStatus === "Pending" ? (
-                        <Button variant="primary" size="sm" onClick={() => onMarkAsPaid(invoice)}>
+                      {invoice.paymentStatus === "Pending" || invoice.paymentStatus === "Rejected" ? (
+                        <Button 
+                          variant="primary" 
+                          size="sm" 
+                          onClick={() => onMarkAsPaid(invoice)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
                           <span className="hidden lg:inline">Mark Paid</span>
                           <span className="lg:hidden">Pay</span>
                         </Button>
                       ) : (
-                        <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-green-400">
+                        <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-green-400 bg-green-500/10 border border-green-500/30 rounded-md">
                           <CheckCircle className="w-3 h-3" /> Paid
                         </div>
                       )}
@@ -167,7 +172,7 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
             key={invoice._id}
             className="bg-[#1e293b]/50 border border-[#334155] rounded-lg p-4 space-y-3 hover:bg-[#1e293b]/70 transition-colors"
           >
-            {/* Card Content (same as before) */}
+            {/* Card Content */}
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <FileText className="w-5 h-5 text-blue-400" />
@@ -227,13 +232,13 @@ const FinanceTable: React.FC<FinanceTableProps> = ({
               >
                 PDF
               </Button>
-              {invoice.paymentStatus === "Pending" ? (
+              {invoice.paymentStatus === "Pending" || invoice.paymentStatus === "Rejected" ? (
                 <Button
                   variant="primary"
                   size="sm"
                   icon={<CheckCircle className="w-3 h-3" />}
                   onClick={() => onMarkAsPaid(invoice)}
-                  className="flex-1"
+                  className="flex-1 bg-green-600 hover:bg-green-700"
                 >
                   Pay
                 </Button>

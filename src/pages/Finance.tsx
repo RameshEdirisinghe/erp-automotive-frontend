@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import FinanceTable from "../components/FinanceTable";
 import SearchFilterBar from "../components/SearchFilterBar";
@@ -10,6 +10,12 @@ import type { InvoiceResponse } from "../types/invoice";
 import type { FinancePaymentData } from "../types/finance";
 import { invoiceService } from "../services/InvoiceService";
 import { financeService } from "../services/FinanceService";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import CustomAlert from "../components/CustomAlert";
+import type { AlertType } from "../components/CustomAlert";
+import CustomConfirm from "../components/CustomConfirm";
+import InvoiceCanvas from "../components/InvoiceCanvas";
 
 const Finance: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,6 +31,23 @@ const Finance: React.FC = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceView, setShowInvoiceView] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: "warning" | "danger" | "info";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: "",
+    onConfirm: () => { },
+  });
+  
+  const invoiceRef = useRef<HTMLDivElement>(null);
   const [paymentDetails, setPaymentDetails] = useState({
     method: "Bank Transfer" as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
     bankName: "",
@@ -35,20 +58,23 @@ const Finance: React.FC = () => {
   });
 
   // Load invoices from backend
-  useEffect(() => {
-    const loadInvoices = async () => {
-      try {
-        setLoading(true);
-        const data = await invoiceService.getAll();
-        setInvoices(data);
-      } catch (error) {
-        console.error('Error loading invoices:', error);
-        alert('Failed to load invoices. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const data = await invoiceService.getAll();
+      setInvoices(data);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load invoices. Please try again.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadInvoices();
   }, []);
 
@@ -74,7 +100,7 @@ const Finance: React.FC = () => {
       // First get the next transaction ID
       const transactionId = await financeService.getNextId();
 
-      // Prepare payment data matching backend schema
+      // Prepare payment data
       const paymentData: FinancePaymentData = {
         transactionId: transactionId,
         transactionDate: new Date(paymentDetails.transactionDate).toISOString(),
@@ -93,15 +119,16 @@ const Finance: React.FC = () => {
       // Create finance transaction
       await financeService.create(paymentData);
 
-      // Update invoice payment status
+      // Update invoice payment status to "Completed"
       await invoiceService.updatePaymentStatus(selectedInvoice._id, 'Completed');
 
-      // Refresh invoices list
-      const updatedInvoices = await invoiceService.getAll();
-      setInvoices(updatedInvoices);
+      setAlert({
+        type: 'success',
+        message: 'Payment successfully recorded for invoice ' + selectedInvoice.invoiceId
+      });
 
-      // Show success message
-      alert('Payment successfully recorded for invoice ' + selectedInvoice.invoiceId);
+      // Refresh invoices list to update status
+      await loadInvoices();
 
       // Reset form
       setShowPaymentModal(false);
@@ -116,7 +143,13 @@ const Finance: React.FC = () => {
 
     } catch (error: any) {
       console.error('Error processing payment:', error);
-      alert('Failed to process payment: ' + (error.message || 'Please try again.'));
+      const errorMessage = error?.response?.data?.message || 
+                          error?.message || 
+                          'Failed to process payment. Please try again.';
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
     } finally {
       setIsProcessingPayment(false);
     }
@@ -128,9 +161,151 @@ const Finance: React.FC = () => {
   };
 
   const handleDownloadInvoice = async (invoice: InvoiceResponse) => {
-    // Implemented in InvoiceViewModal now
-    setSelectedInvoice(invoice);
-    setShowInvoiceView(true);
+    if (!invoice) return;
+
+    const proceedWithDownload = async () => {
+      try {
+        setIsGeneratingPDF(true);
+        setAlert({
+          type: 'info',
+          message: 'Generating PDF... Please wait.'
+        });
+
+        // Create a temporary container for the invoice
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'fixed';
+        tempContainer.style.left = '0';
+        tempContainer.style.top = '0';
+        tempContainer.style.width = '210mm';
+        tempContainer.style.height = '297mm';
+        tempContainer.style.backgroundColor = 'white';
+        tempContainer.style.zIndex = '9999';
+        tempContainer.style.opacity = '0';
+        document.body.appendChild(tempContainer);
+
+        // Render the InvoiceCanvas
+        const invoiceData = {
+          invoiceId: invoice.invoiceId,
+          customer: invoice.customer?._id || "",
+          customerDetails: invoice.customer,
+          items: invoice.items.map(item => ({
+            id: item._id || Date.now().toString(),
+            item: item.item?._id || "",
+            itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+          })),
+          subTotal: invoice.subTotal,
+          discount: invoice.discount,
+          discountPercentage: invoice.discount > 0 ? (invoice.discount / invoice.subTotal) * 100 : 0,
+          totalAmount: invoice.totalAmount,
+          paymentStatus: invoice.paymentStatus,
+          paymentMethod: invoice.paymentMethod,
+          bankDepositDate: invoice.bankDepositDate,
+          issueDate: invoice.issueDate,
+          dueDate: invoice.dueDate,
+          vehicleNumber: invoice.vehicleNumber,
+          notes: invoice.notes,
+        };
+
+        // Temporarily render the invoice
+        const { createRoot } = await import('react-dom/client');
+        const root = createRoot(tempContainer);
+        
+        root.render(
+          <div 
+            ref={invoiceRef}
+            style={{
+              width: '210mm',
+              minHeight: '297mm',
+              backgroundColor: 'white',
+              padding: '20mm',
+              boxSizing: 'border-box'
+            }}
+          >
+            <InvoiceCanvas invoiceData={invoiceData} />
+          </div>
+        );
+
+        // Wait for rendering
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const invoiceElement = tempContainer.firstChild as HTMLElement;
+        if (!invoiceElement) throw new Error('Invoice element not found');
+
+        // Generate PDF
+        const canvas = await html2canvas(invoiceElement, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+        });
+
+        const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+        const imgWidth = pdfWidth;
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
+
+        pdf.addImage(jpegData, 'JPEG', 0, 0, imgWidth, finalHeight);
+        pdf.save(`invoice-${invoice.invoiceId}.pdf`);
+
+        // Cleanup
+        root.unmount();
+        document.body.removeChild(tempContainer);
+
+        setAlert({
+          type: 'success',
+          message: 'PDF downloaded successfully!'
+        });
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
+        });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    };
+
+    if (!invoice._id) {
+      setConfirmConfig({
+        isOpen: true,
+        title: "Save Invoice First",
+        message: "This invoice needs to be saved before downloading. Save now?",
+        confirmText: "Save & Download",
+        onConfirm: async () => {
+          try {
+            // Update payment status if pending
+            if (invoice.paymentStatus === 'Pending') {
+              await invoiceService.updatePaymentStatus(invoice._id, 'Completed');
+              await loadInvoices();
+            }
+            await proceedWithDownload();
+          } catch (error) {
+            setAlert({
+              type: 'error',
+              message: 'Failed to save invoice before download'
+            });
+          }
+        }
+      });
+      return;
+    }
+
+    await proceedWithDownload();
   };
 
   // Filter invoices based on search and date range
@@ -183,6 +358,29 @@ const Finance: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
+        {alert && (
+          <CustomAlert
+            type={alert.type}
+            message={alert.message}
+            onClose={() => setAlert(null)}
+            duration={3000}
+          />
+        )}
+
+        <CustomConfirm
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmText={confirmConfig.confirmText}
+          cancelText={confirmConfig.cancelText}
+          type={confirmConfig.type}
+          onConfirm={() => {
+            confirmConfig.onConfirm();
+            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          }}
+          onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        />
+
         {/* Header */}
         <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 sm:px-6 shadow-lg">
           <div className="flex items-center gap-3">
@@ -243,6 +441,8 @@ const Finance: React.FC = () => {
         isOpen={showInvoiceView}
         onClose={() => setShowInvoiceView(false)}
         selectedInvoice={selectedInvoice}
+        onDownloadInvoice={handleDownloadInvoice}
+        isGeneratingPDF={isGeneratingPDF}
       />
     </div>
   );
