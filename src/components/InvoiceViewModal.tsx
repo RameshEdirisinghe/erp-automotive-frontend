@@ -3,7 +3,6 @@ import { FileText, Download, AlertCircle, Printer } from 'lucide-react';
 import { Modal, Button, LoadingSpinner } from './common';
 import InvoiceCanvas from './InvoiceCanvas';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import type { InvoiceResponse } from '../types/invoice';
 
 interface InvoiceViewModalProps {

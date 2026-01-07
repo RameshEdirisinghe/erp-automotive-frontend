@@ -25,8 +25,6 @@ import type {
   InvoiceData,
   InvoiceItem,
   BackendInvoiceData,
-  PaymentStatusType,
-  PaymentMethodType,
   InvoiceCustomer,
   InvoiceResponse
 } from "../types/invoice";
@@ -577,7 +575,7 @@ const Invoice: React.FC = () => {
     return 'Unknown Customer';
   };
 
-  const handleLoadInvoice = async (invoiceData: any, mode: 'view' | 'edit') => {
+  const handleLoadInvoice = async (invoiceData: any) => {
     try {
       // Fetch full invoice details
       let fullInvoiceData = invoiceData;
@@ -1234,7 +1232,7 @@ const Invoice: React.FC = () => {
                                   <td className="px-4 py-3">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
-                                        onClick={() => handleLoadInvoice(invoice, 'view')}
+                                        onClick={() => handleLoadInvoice(invoice)}
                                         title="View"
                                         className="p-2 rounded-md text-blue-400 hover:bg-blue-500/20 transition"
                                       >
@@ -1242,7 +1240,7 @@ const Invoice: React.FC = () => {
                                       </button>
 
                                       <button
-                                        onClick={() => handleLoadInvoice(invoice, 'edit')}
+                                        onClick={() => handleLoadInvoice(invoice)}
                                         title="Edit"
                                         className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
                                       >
