@@ -168,14 +168,8 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     Pending: { bg: "bg-yellow-500/20 border-yellow-500/30", text: "text-yellow-400", dot: "bg-yellow-400" },
     Rejected: { bg: "bg-red-500/20 border-red-500/30", text: "text-red-400", dot: "bg-red-400" },
   };
-<<<<<<< HEAD
-
-  const { bg, text, dot } = statusMap[status] || { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" };
- 
-=======
   const { bg, text, dot } = statusMap[status] || { bg: "bg-gray-500/20 border-gray-500/30", text: "text-gray-400", dot: "bg-gray-400" };
 
->>>>>>> f75e06543d101b5ca02ca453cac00406685fc628
   return (
     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${bg} ${text} border`}>
       <span className={`w-2 h-2 rounded-full ${dot}`} />
