@@ -5,6 +5,7 @@ export const authService = {
   async login(loginData: LoginData): Promise<AuthRes> {
     try {
       const response = await api.post<AuthRes>("/auth/login", loginData);
+      
       return response.data;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || "Login failed";
@@ -18,6 +19,16 @@ export const authService = {
       return response.data;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || "Registration failed";
+      throw new Error(errorMessage);
+    }
+  },
+
+  async refreshToken(): Promise<{ accessToken: string; refreshToken: string }> {
+    try {
+      const response = await api.post("/auth/refresh");
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || "Token refresh failed";
       throw new Error(errorMessage);
     }
   },
@@ -36,3 +47,5 @@ export const authService = {
 
 export const loginAPI = authService.login;
 export const registerAPI = authService.register;
+export const logoutAPI = authService.logout;
+export const refreshTokenAPI = authService.refreshToken;
