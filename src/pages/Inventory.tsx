@@ -6,9 +6,10 @@ import ReusableTable from "../components/ReusableTable";
 import InventoryForm from "../components/InventoryForm";
 import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
-import { User, Package } from "lucide-react";
+import { Package } from "lucide-react";
 import { inventoryService } from "../services/InventoryService";
 import type { InventoryItem } from "../types/inventory";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 const Inventory: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -145,7 +146,7 @@ const Inventory: React.FC = () => {
 
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg relative z-50">
           <div className="flex items-center gap-3">
             <Package className="text-blue-400 w-6 h-6" />
             <h1 className="text-xl font-semibold text-gray-200">Inventory Management</h1>
@@ -157,8 +158,8 @@ const Inventory: React.FC = () => {
               placeholder="Search inventory..."
               className="bg-[#0f172a] border border-[#334155] rounded-full px-4 py-1.5 text-sm placeholder:text-gray-400 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
-              <User className="text-gray-200 w-5 h-5" />
+            <div className="flex items-center gap-4">
+              <UserProfileDropdown />
             </div>
           </div>
         </div>

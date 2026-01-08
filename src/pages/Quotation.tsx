@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import {
-  User,
   FileText,
   Download,
   Printer,
@@ -39,6 +38,7 @@ import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import ErrorBoundary from "../components/ErrorBoundary";
 import CustomConfirm from "../components/CustomConfirm";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 const Quotation: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -443,7 +443,7 @@ const Quotation: React.FC = () => {
     try {
       setIsLoadingQuotations(true);
       const quotations = await quotationService.getAll();
-      const sortedQuotations = (quotations || []).sort((a, b) => 
+      const sortedQuotations = (quotations || []).sort((a, b) =>
         new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
       );
       setAllQuotations(sortedQuotations);
@@ -893,7 +893,7 @@ const Quotation: React.FC = () => {
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
 
-        <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6">
+        <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6 relative z-40">
           <div className="flex items-center gap-3">
             {viewMode === 'manage' ? (
               <button onClick={() => setViewMode('edit')} className="p-2 rounded-lg hover:bg-[#15202b] transition">
@@ -947,8 +947,8 @@ const Quotation: React.FC = () => {
               </button>
             )}
 
-            <div className="bg-[#081226] border border-[#16324a] p-2 rounded-full cursor-pointer hover:bg-[#0b2434] transition">
-              <User className="text-gray-200 w-4 h-4 md:w-5 md:h-5" />
+            <div className="flex items-center gap-4">
+              <UserProfileDropdown />
             </div>
           </div>
         </div>
