@@ -5,7 +5,7 @@ import SearchFilterBar from "../components/SearchFilterBar";
 import PaymentModal from "../components/PaymentModal";
 import InvoiceViewModal from "../components/InvoiceViewModal";
 import { LoadingSpinner } from "../components/common";
-import { DollarSign, User } from "lucide-react";
+import { DollarSign } from "lucide-react";
 import type { InvoiceResponse } from "../types/invoice";
 import type { FinancePaymentData, FinanceTransaction } from "../types/finance";
 import { invoiceService } from "../services/InvoiceService";
