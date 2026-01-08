@@ -1,35 +1,13 @@
+import api from "../api/axios";
 import type { User, CreateUserDto, UpdateUserDto } from "../types/users";
+import type { AuthRes, AuthUser } from "../types/auth";
 
-// Mock users data
-const mockUsers: User[] = [
-  {
-    _id: "1",
-    fullName: "Admin User",
-    email: "admin@example.com",
-    role: "admin",
-    createdAt: "2024-01-01T00:00:00.000Z",
-    updatedAt: "2024-01-01T00:00:00.000Z"
-  },
-  {
-    _id: "2",
-    fullName: "Inventory Manager 1",
-    email: "inventory1@example.com",
-    role: "inventory_manager",
-    createdAt: "2024-01-02T00:00:00.000Z",
-    updatedAt: "2024-01-02T00:00:00.000Z"
-  },
-  {
-    _id: "3",
-    fullName: "Inventory Manager 2",
-    email: "inventory2@example.com",
-    role: "inventory_manager",
-    createdAt: "2024-01-03T00:00:00.000Z",
-    updatedAt: "2024-01-03T00:00:00.000Z"
-  }
-];
+type UnifiedUser = User & {
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 class UserService {
-  private users: User[] = [...mockUsers];
   private currentUser: User | null = null;
 
   setCurrentUser(user: User | null) {
@@ -37,73 +15,123 @@ class UserService {
   }
 
   async getUsers(): Promise<User[]> {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return [...this.users];
+    try {
+      const response = await api.get<UnifiedUser[]>("/users");
+      // Transform the response to match User type
+      return response.data.map(user => ({
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt || new Date().toISOString(),
+        updatedAt: user.updatedAt || new Date().toISOString()
+      }));
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = err.response?.data?.message || err.message || "Failed to fetch users";
+      throw new Error(errorMessage);
+    }
   }
 
   async getUserById(id: string): Promise<User | null> {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return this.users.find(user => user._id === id) || null;
+    try {
+      const response = await api.get<UnifiedUser>(`/users/${id}`);
+      const user = response.data;
+      // Transform the response to match User type
+      return {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt || new Date().toISOString(),
+        updatedAt: user.updatedAt || new Date().toISOString()
+      };
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number; data?: { message?: string } }; message?: string };
+      if (err.response?.status === 404) {
+        return null;
+      }
+      const errorMessage = err.response?.data?.message || err.message || "Failed to fetch user";
+      throw new Error(errorMessage);
+    }
   }
 
   async createUser(dto: CreateUserDto): Promise<User> {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newUser: User = {
-      _id: Date.now().toString(),
-      fullName: dto.fullName,
-      email: dto.email,
-      role: dto.role,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.users.push(newUser);
-    return newUser;
+    try {
+      const response = await api.post<AuthRes>("/auth/register", dto);
+      
+      let userData: AuthUser;
+      
+      if (response.data && typeof response.data === 'object') {
+        if ('user' in response.data && response.data.user) {
+          userData = response.data.user;
+        } else if ('_id' in response.data) {
+          userData = response.data as AuthUser;
+        } else {
+          throw new Error("Invalid response format from server");
+        }
+      } else {
+        throw new Error("No data returned from server");
+      }
+      
+      // Transform AuthUser to User type
+      return {
+        _id: userData._id,
+        fullName: userData.fullName,
+        email: userData.email,
+        role: userData.role,
+        createdAt: userData.createdAt || new Date().toISOString(),
+        updatedAt: userData.updatedAt || new Date().toISOString()
+      };
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = err.response?.data?.message || err.message || "Failed to create user";
+      throw new Error(errorMessage);
+    }
   }
 
   async updateUser(id: string, dto: UpdateUserDto): Promise<User | null> {
-    await new Promise(resolve => setTimeout(resolve, 400));
-    
-    const index = this.users.findIndex(user => user._id === id);
-    if (index === -1) return null;
-    
-    // Prevent updating admin if not admin
-    const userToUpdate = this.users[index];
-    if (userToUpdate.role === 'admin' && this.currentUser?.role !== 'admin') {
-      throw new Error("Only admins can modify admin users");
+    try {
+      const response = await api.put<UnifiedUser>(`/users/${id}`, dto);
+      const user = response.data;
+      // Transform the response to match User type
+      return {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt || new Date().toISOString(),
+        updatedAt: user.updatedAt || new Date().toISOString()
+      };
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = err.response?.data?.message || err.message || "Failed to update user";
+      throw new Error(errorMessage);
     }
-    
-    this.users[index] = {
-      ...this.users[index],
-      ...dto,
-      updatedAt: new Date().toISOString()
-    };
-    
-    return this.users[index];
   }
 
   async deleteUser(id: string): Promise<boolean> {
-    await new Promise(resolve => setTimeout(resolve, 400));
-    
-    const userToDelete = this.users.find(user => user._id === id);
-    
-    // Prevent deleting admin users
-    if (userToDelete?.role === 'admin') {
-      throw new Error("Cannot delete admin users");
+    try {
+      await api.delete(`/users/${id}`);
+      return true;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = err.response?.data?.message || err.message || "Failed to delete user";
+      throw new Error(errorMessage);
     }
-    
-    if (!userToDelete) return false;
-    
-    this.users = this.users.filter(user => user._id !== id);
-    return true;
   }
 
   async checkEmailExists(email: string, excludeId?: string): Promise<boolean> {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return this.users.some(user => 
-      user.email === email && user._id !== excludeId
-    );
+    try {
+      const users = await this.getUsers();
+      return users.some(user => 
+        user.email.toLowerCase() === email.toLowerCase() && 
+        (!excludeId || user._id !== excludeId)
+      );
+    } catch (error) {
+      console.error("Failed to check email:", error);
+      return false;
+    }
   }
 }
 

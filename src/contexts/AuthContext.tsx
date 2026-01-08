@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import type { LoginData, RegisterData, User as AuthUser } from "../types/auth";
+import { authService } from "../services/authService";
+import UserService from "../services/UserService";
+import type { LoginData, RegisterData, User as AuthUser, AuthRes } from "../types/auth";
 import type { UserRole } from "../types/roles";
 import type { User } from "../types/users";
-import UserService from "../services/UserService";
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -10,42 +11,24 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (data: LoginData) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
+  register: (data: RegisterData) => Promise<AuthRes>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock user data for initial login
-const mockUsers = [
-  {
-    _id: "1",
-    fullName: "Admin User",
-    email: "main.residue@gmail.com",
-    role: "admin" as UserRole,
-    password: "Residue@123",
-    createdAt: "2024-01-01T00:00:00.000Z",
-    updatedAt: "2024-01-01T00:00:00.000Z"
-  },
-  {
-    _id: "2",
-    fullName: "Inventory Manager",
-    email: "manager@example.com",
-    role: "inventory_manager" as UserRole,
-    password: "manager123",
-    createdAt: "2024-01-02T00:00:00.000Z",
-    updatedAt: "2024-01-02T00:00:00.000Z"
-  }
-] as const;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem("user");
     if (saved) {
-      const user = JSON.parse(saved) as AuthUser;
-      UserService.setCurrentUser(user as User);
-      return user;
+      try {
+        const user = JSON.parse(saved) as AuthUser;
+        UserService.setCurrentUser(user as User);
+        return user;
+      } catch {
+        return null;
+      }
     }
     return null;
   });
@@ -61,45 +44,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getCurrentUser = useCallback(async (): Promise<AuthUser | null> => {
     try {
-      const currentUser = localStorage.getItem("user");
-      if (currentUser) {
-        const user = JSON.parse(currentUser) as AuthUser;
-        UserService.setCurrentUser(user as User);
-        return user;
+      const savedUser = localStorage.getItem("user");
+      
+      if (!savedUser) {
+        return null;
       }
-      return null;
+      
+      const user = JSON.parse(savedUser) as AuthUser;
+      UserService.setCurrentUser(user as User);
+      
+      return user;
     } catch (error) {
       console.error("Failed to get current user:", error);
       return null;
     }
   }, []);
 
-  // Update the initAuth function
   const initAuth = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       const currentUser = await getCurrentUser();
       
       if (currentUser) {
         setUser(currentUser);
         setRole(currentUser.role as UserRole);
-      } else {
-        // No user in localStorage, clear everything
-        setUser(null);
-        setRole(null);
-        localStorage.removeItem("user");
-        localStorage.removeItem("role");
       }
     } catch (error) {
       console.error("Auth initialization error:", error);
-      setUser(null);
-      setRole(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("role");
     } finally {
       setIsLoading(false);
     }
@@ -111,9 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async (): Promise<boolean> => {
     try {
-      // Simulate API verification
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
       const currentUser = await getCurrentUser();
       
       if (currentUser) {
@@ -125,40 +94,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     } catch (error) {
       console.error("Auth check error:", error);
-      setUser(null);
-      setRole(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("role");
       return false;
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const login = async (data: LoginData) => {
+  const login = async (data: LoginData): Promise<void> => {
     setIsLoading(true);
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const result = await authService.login(data);
       
-      // Find user in mock data
-      const foundUser = mockUsers.find(
-        u => u.email === data.email && u.password === data.password
-      );
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(result.user));
+      localStorage.setItem("role", result.user.role);
       
-      if (!foundUser) {
-        throw new Error("Invalid credentials");
-      }
+      setUser(result.user);
+      setRole(result.user.role as UserRole);
+      UserService.setCurrentUser(result.user as User);
       
-      const { password: _password, ...userWithoutPassword } = foundUser;
-      const loggedUser: AuthUser = userWithoutPassword;
-      
-      setUser(loggedUser);
-      setRole(loggedUser.role as UserRole);
-      UserService.setCurrentUser(loggedUser as User);
-      
-      localStorage.setItem("user", JSON.stringify(loggedUser));
-      localStorage.setItem("role", loggedUser.role);
     } catch (error: unknown) {
       console.error("Login error:", error);
       throw error instanceof Error ? error : new Error("Login failed");
@@ -167,30 +119,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (data: RegisterData) => {
+  const register = async (data: RegisterData): Promise<AuthRes> => {
     setIsLoading(true);
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const result = await authService.register(data);
       
-      // Check if email already exists
-      const emailExists = mockUsers.some(u => u.email === data.email);
-      if (emailExists) {
-        throw new Error("Email already in use");
+      if (result.user) {
+        console.log("User created successfully:", result.user);
       }
       
-      // Create new user
-      const newUser = {
-        _id: Date.now().toString(),
-        fullName: data.fullName,
-        email: data.email,
-        role: (data.role || "inventory_manager") as UserRole,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      console.log("Registered new user:", newUser);
-      
+      return result;
     } catch (error: unknown) {
       console.error("Registration error:", error);
       throw error instanceof Error ? error : new Error("Registration failed");
@@ -199,21 +137,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+      await authService.logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
       UserService.setCurrentUser(null);
       
       setUser(null);
       setRole(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("role");
-    } catch (error) {
-      console.error("Logout error:", error);
       
-      setUser(null);
-      setRole(null);
       localStorage.removeItem("user");
       localStorage.removeItem("role");
     }
