@@ -1,3 +1,5 @@
+import type { UserRole } from './roles';
+
 export interface LoginData {
   email: string;
   password: string;
@@ -7,14 +9,14 @@ export interface RegisterData {
   fullName: string;
   email: string;
   password: string;
-  role?: string;
+  role?: UserRole;
 }
 
 export interface User {
   _id: string;
   fullName: string;
   email: string;
-  role: string;
+  role: UserRole;
   createdAt?: string;
   updatedAt?: string;
 }

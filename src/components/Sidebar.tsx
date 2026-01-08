@@ -6,9 +6,10 @@ import {
   ClipboardList,
   DollarSign,
   FileText,
-  Settings,
+  UserCog,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,14 +19,31 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useAuth();
 
-  const menuItems = [
-    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
-    { name: "Inventory", icon: Package, path: "/inventory" },
-    { name: "Quotations", icon: ClipboardList, path: "/quotations" },
-    { name: "Invoice", icon: FileText, path: "/invoice" },
-    { name: "Finance", icon: DollarSign, path: "/finance" },
+  // Define main menu items 
+  const mainMenuItems = [
+    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard", roles: ['admin', 'inventory_manager'] },
+    { name: "Inventory", icon: Package, path: "/inventory", roles: ['admin', 'inventory_manager'] },
+    { name: "Quotations", icon: ClipboardList, path: "/quotations", roles: ['admin'] },
+    { name: "Invoice", icon: FileText, path: "/invoice", roles: ['admin'] },
+    { name: "Finance", icon: DollarSign, path: "/finance", roles: ['admin'] },
   ];
+
+  // Define bottom menu items
+  const bottomMenuItems = [
+    { name: "User Management", icon: UserCog, path: "/user-management", roles: ['admin'] },
+  ];
+
+  // Filter main menu items based on user role
+  const filteredMainItems = mainMenuItems.filter(item => 
+    item.roles.includes(role || 'inventory_manager')
+  );
+
+  // Filter bottom menu items based on user role
+  const filteredBottomItems = bottomMenuItems.filter(item => 
+    item.roles.includes(role || 'inventory_manager')
+  );
 
   const handleNavigation = (path: string) => {
     navigate(path);
@@ -47,6 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
       `}
     >
       
+      {/* Header with Menu toggle */}
       <div
         className="flex items-center gap-3 px-4 py-4 cursor-pointer hover:bg-white/5 rounded-xl m-2 transition-all"
         onClick={() => setIsOpen(!isOpen)}
@@ -61,9 +80,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
       <div className="border-t border-[#1f2937] mx-3"></div>
 
-  
+      {/* Main Navigation Items */}
       <div className="flex flex-col flex-1 mt-4 space-y-2">
-        {menuItems.map((item) => (
+        {filteredMainItems.map((item) => (
           <div
             key={item.name}
             onClick={() => handleNavigation(item.path)}
@@ -93,34 +112,42 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
         ))}
       </div>
 
-      <div className="border-t border-[#1f2937] mx-3"></div>
+      {/* Bottom Section */}
+      {filteredBottomItems.length > 0 && (
+        <>
+          <div className="border-t border-[#1f2937] mx-3 mb-2"></div>
+          
+          {/* User Management Item */}
+          {filteredBottomItems.map((item) => (
+            <div
+              key={item.name}
+              onClick={() => handleNavigation(item.path)}
+              className={`
+                flex items-center space-x-3 px-4 py-3 rounded-xl mx-2 mb-4 cursor-pointer
+                transition-all duration-300
+                ${
+                  isActive(item.path)
+                    ? "bg-blue-500/20 border border-blue-500/30 text-blue-400"
+                    : "hover:bg-white/5 hover:shadow-lg hover:-translate-y-0.5"
+                }
+              `}
+            >
+              <item.icon 
+                size={20} 
+                className={isActive(item.path) ? "text-blue-400" : "text-gray-300"} 
+              />
 
-      
-      <div
-        onClick={() => handleNavigation("/settings")}
-        className={`
-          flex items-center space-x-3 px-4 py-3 
-          cursor-pointer rounded-xl mx-2 mb-4
-          transition-all duration-300
-          ${
-            isActive("/settings")
-              ? "bg-blue-500/20 border border-blue-500/30 text-blue-400"
-              : "hover:bg-white/5 hover:shadow-lg hover:-translate-y-0.5"
-          }
-        `}
-      >
-        <Settings 
-          size={20} 
-          className={isActive("/settings") ? "text-blue-400" : "text-gray-300"} 
-        />
-        {isOpen && (
-          <span className={`text-sm font-medium ${
-            isActive("/settings") ? "text-blue-400" : "text-gray-200"
-          }`}>
-            Settings
-          </span>
-        )}
-      </div>
+              {isOpen && (
+                <span className={`text-sm font-medium ${
+                  isActive(item.path) ? "text-blue-400" : "text-gray-200"
+                }`}>
+                  {item.name}
+                </span>
+              )}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 };
