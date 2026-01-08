@@ -6,7 +6,7 @@ import ReusableTable from "../components/ReusableTable";
 import InventoryForm from "../components/InventoryForm";
 import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
-import { User, Package } from "lucide-react";
+import { Package } from "lucide-react";
 import { inventoryService } from "../services/InventoryService";
 import type { InventoryItem } from "../types/inventory";
 import UserProfileDropdown from "../components/UserProfileDropdown";

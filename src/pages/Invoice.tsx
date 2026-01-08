@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import {
-  User,
   FileText,
   Download,
   Printer,
