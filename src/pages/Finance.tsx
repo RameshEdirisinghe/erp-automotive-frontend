@@ -5,7 +5,7 @@ import SearchFilterBar from "../components/SearchFilterBar";
 import PaymentModal from "../components/PaymentModal";
 import InvoiceViewModal from "../components/InvoiceViewModal";
 import { LoadingSpinner } from "../components/common";
-import { DollarSign, User } from "lucide-react";
+import { DollarSign } from "lucide-react";
 import type { InvoiceResponse } from "../types/invoice";
 import type { FinancePaymentData, FinanceTransaction } from "../types/finance";
 import { invoiceService } from "../services/InvoiceService";
@@ -16,6 +16,7 @@ import CustomAlert from "../components/CustomAlert";
 import type { AlertType } from "../components/CustomAlert";
 import CustomConfirm from "../components/CustomConfirm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
+import UserProfileDropdown from "../components/UserProfileDropdown";
 
 const Finance: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,7 +48,7 @@ const Finance: React.FC = () => {
     message: "",
     onConfirm: () => { },
   });
-  
+
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [paymentDetails, setPaymentDetails] = useState({
     method: "Bank Transfer" as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
@@ -93,7 +94,7 @@ const Finance: React.FC = () => {
         loadFinanceTransactions()
       ]);
     };
-    
+
     loadAllData();
   }, []);
 
@@ -136,7 +137,7 @@ const Finance: React.FC = () => {
       };
 
       console.log('Creating payment transaction:', paymentData);
-      
+
       // Create finance transaction
       await financeService.create(paymentData);
 
@@ -167,9 +168,9 @@ const Finance: React.FC = () => {
 
     } catch (error: any) {
       console.error('Error processing payment:', error);
-      const errorMessage = error?.response?.data?.message || 
-                          error?.message || 
-                          'Failed to process payment. Please try again.';
+      const errorMessage = error?.response?.data?.message ||
+        error?.message ||
+        'Failed to process payment. Please try again.';
       setAlert({
         type: 'error',
         message: errorMessage
@@ -236,9 +237,9 @@ const Finance: React.FC = () => {
         // Temporarily render the invoice
         const { createRoot } = await import('react-dom/client');
         const root = createRoot(tempContainer);
-        
+
         root.render(
-          <div 
+          <div
             ref={invoiceRef}
             style={{
               width: '210mm',
@@ -335,7 +336,7 @@ const Finance: React.FC = () => {
   // Filter invoices based on search and date range
   const filteredInvoices = invoices.filter(invoice => {
     const query = filterConfig.searchQuery.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       invoice.invoiceId.toLowerCase().includes(query) ||
       invoice.customer?.fullName?.toLowerCase().includes(query) ||
       (invoice.vehicleNumber && invoice.vehicleNumber.toLowerCase().includes(query)) ||
@@ -346,13 +347,13 @@ const Finance: React.FC = () => {
     // Date range filtering
     if (filterConfig.startDate || filterConfig.endDate) {
       const invoiceDate = new Date(invoice.issueDate);
-      
+
       if (filterConfig.startDate) {
         const start = new Date(filterConfig.startDate);
         start.setHours(0, 0, 0, 0);
         if (invoiceDate < start) return false;
       }
-      
+
       if (filterConfig.endDate) {
         const end = new Date(filterConfig.endDate);
         end.setHours(23, 59, 59, 999);
@@ -406,16 +407,14 @@ const Finance: React.FC = () => {
         />
 
         {/* Header */}
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 sm:px-6 shadow-lg">
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-4 sm:px-6 shadow-lg relative z-40">
           <div className="flex items-center gap-3">
             <DollarSign className="text-blue-400 w-6 h-6" />
             <h1 className="text-lg sm:text-xl font-semibold text-gray-200">Finance</h1>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition-colors">
-              <User className="text-gray-200 w-5 h-5" />
-            </div>
+            <UserProfileDropdown />
           </div>
         </div>
 
