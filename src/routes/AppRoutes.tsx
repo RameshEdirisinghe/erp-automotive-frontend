@@ -8,60 +8,69 @@ import Finance from "../pages/Finance";
 import Invoice from "../pages/Invoice";
 import UserManagement from "../pages/UserManagement";
 import ProtectedRoute from "./ProtectedRoute";
-import AdminRoute from "./AdminRoute";
+import RoleRoute from "./RoleRoute";
 
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
 
+      {/* ADMIN ONLY */}
       <Route path="/" element={
         <ProtectedRoute>
-          <Dashboard />
+          <RoleRoute allowedRoles={['admin']}>
+            <Dashboard />
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
       <Route path="/dashboard" element={
         <ProtectedRoute>
-          <Dashboard />
+          <RoleRoute allowedRoles={['admin']}>
+            <Dashboard />
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
+      {/* ADMIN + INVENTORY MANAGER */}
       <Route path="/inventory" element={
         <ProtectedRoute>
-          <Inventory />
+          <RoleRoute allowedRoles={['admin', 'inventory_manager']}>
+            <Inventory />
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
+      {/* ADMIN ONLY */}
       <Route path="/quotations" element={
         <ProtectedRoute>
-          <AdminRoute>
+          <RoleRoute allowedRoles={['admin']}>
             <Quotations />
-          </AdminRoute>
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
       <Route path="/finance" element={
         <ProtectedRoute>
-          <AdminRoute>
+          <RoleRoute allowedRoles={['admin']}>
             <Finance />
-          </AdminRoute>
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
       <Route path="/invoice" element={
         <ProtectedRoute>
-          <AdminRoute>
+          <RoleRoute allowedRoles={['admin']}>
             <Invoice />
-          </AdminRoute>
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
       <Route path="/user-management" element={
         <ProtectedRoute>
-          <AdminRoute>
+          <RoleRoute allowedRoles={['admin']}>
             <UserManagement />
-          </AdminRoute>
+          </RoleRoute>
         </ProtectedRoute>
       } />
 
