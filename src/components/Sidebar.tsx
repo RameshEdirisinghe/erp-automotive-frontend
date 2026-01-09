@@ -21,26 +21,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const location = useLocation();
   const { role } = useAuth();
 
-  // Define main menu items 
   const mainMenuItems = [
-    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard", roles: ['admin', 'inventory_manager'] },
+    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard", roles: ['admin'] },
     { name: "Inventory", icon: Package, path: "/inventory", roles: ['admin', 'inventory_manager'] },
     { name: "Quotations", icon: ClipboardList, path: "/quotations", roles: ['admin'] },
     { name: "Invoice", icon: FileText, path: "/invoice", roles: ['admin'] },
     { name: "Finance", icon: DollarSign, path: "/finance", roles: ['admin'] },
   ];
 
-  // Define bottom menu items
   const bottomMenuItems = [
     { name: "User Management", icon: UserCog, path: "/user-management", roles: ['admin'] },
   ];
 
-  // Filter main menu items based on user role
   const filteredMainItems = mainMenuItems.filter(item => 
     item.roles.includes(role || 'inventory_manager')
   );
 
-  // Filter bottom menu items based on user role
   const filteredBottomItems = bottomMenuItems.filter(item => 
     item.roles.includes(role || 'inventory_manager')
   );

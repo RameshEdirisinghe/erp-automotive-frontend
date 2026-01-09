@@ -153,11 +153,6 @@ const Inventory: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <input
-              type="text"
-              placeholder="Search inventory..."
-              className="bg-[#0f172a] border border-[#334155] rounded-full px-4 py-1.5 text-sm placeholder:text-gray-400 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            />
             <div className="flex items-center gap-4">
               <UserProfileDropdown />
             </div>
@@ -166,37 +161,33 @@ const Inventory: React.FC = () => {
 
         <main className="flex-1 overflow-y-auto p-6 space-y-4">
           <InventoryOverview stats={stats} />
+          
+          <SearchFilter
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            selectedCategory={selectedCategory}
+            onCategoryChange={setSelectedCategory}
+          />
 
-          <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <SearchFilter
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-            />
-          </div>
-
-          <div className="bg-[#1e293b]/70 border border-[#334155] rounded-2xl shadow-xl p-5">
-            <ReusableTable
-              endpoint="/inventory-items"
-              columns={inventoryColumns}
-              columnLabels={inventoryColumnLabels}
-              onAdd={handleAddItem}
-              onEdit={handleEditItem}
-              onDelete={handleDeleteItem}
-              onView={handleViewItem}
-              showActions={true}
-              refreshTrigger={refreshTrigger}
-              searchTerm={searchTerm}
-              selectedCategory={selectedCategory}
-              computeRowValue={(column, item) => {
-                if (column === "actual_sold_price") {
-                  return (item.sell_price * (1 - (item.discount_rate || 0) / 100)).toFixed(2);
-                }
-                return item[column];
-              }}
-            />
-          </div>
+          <ReusableTable
+            endpoint="/inventory-items"
+            columns={inventoryColumns}
+            columnLabels={inventoryColumnLabels}
+            onAdd={handleAddItem}
+            onEdit={handleEditItem}
+            onDelete={handleDeleteItem}
+            onView={handleViewItem}
+            showActions={true}
+            refreshTrigger={refreshTrigger}
+            searchTerm={searchTerm}
+            selectedCategory={selectedCategory}
+            computeRowValue={(column, item) => {
+              if (column === "actual_sold_price") {
+                return (item.sell_price * (1 - (item.discount_rate || 0) / 100)).toFixed(2);
+              }
+              return item[column];
+            }}
+          />
 
           <InventoryForm
             isOpen={isFormOpen}
