@@ -11,7 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { DollarSign, Package } from "lucide-react";
+import { Package } from "lucide-react";
 import { fetchSalesOverview } from "../services/DashboardService";
 
 interface SalesOverviewData {
@@ -65,17 +65,17 @@ const DashboardOverview: React.FC = () => {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency: "LKR",
       minimumFractionDigits: 0,
     }).format(amount);
 
   const salesCard = {
     title: "Total Sales",
-    value: salesData ? formatCurrency(salesData.totalSales) : "$0",
+    value: salesData ? formatCurrency(salesData.totalSales) : "LKR 0",
     desc: "1 month indicator",
     color: "bg-blue-600",
     glow: "shadow-[0_0_25px_rgba(37,99,235,0.6)]",
-    icon: <DollarSign className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]" />,
+    icon: <span className="text-2xl font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">LKR</span>,
   };
 
   const productCard = {
