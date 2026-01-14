@@ -9,6 +9,8 @@ import Invoice from "../pages/Invoice";
 import UserManagement from "../pages/UserManagement";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminRoute from "./AdminRoute";
+import InvoiceView from "../pages/InvoiceView";
+import QuotationView from "../pages/QuotationView";
 
 const AppRoutes: React.FC = () => {
   return (
@@ -64,6 +66,9 @@ const AppRoutes: React.FC = () => {
           </AdminRoute>
         </ProtectedRoute>
       } />
+
+      <Route path="/invoice/view/:id" element={<InvoiceView />} />
+      <Route path="/quotation/view/:id" element={<QuotationView />} /> 
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
