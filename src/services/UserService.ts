@@ -1,6 +1,6 @@
 import api from "../api/axios";
 import type { User, CreateUserDto, UpdateUserDto } from "../types/users";
-import type { AuthRes, AuthUser } from "../types/auth";
+import type { AuthRes} from "../types/auth";
 
 type UnifiedUser = User & {
   createdAt?: string;
@@ -12,6 +12,10 @@ class UserService {
 
   setCurrentUser(user: User | null) {
     this.currentUser = user;
+  }
+
+  getCurrentUser(): User | null {
+    return this.currentUser;
   }
 
   async getUsers(): Promise<User[]> {
@@ -60,19 +64,11 @@ class UserService {
     try {
       const response = await api.post<AuthRes>("/auth/register", dto);
       
-      let userData: AuthUser;
-      
-      if (response.data && typeof response.data === 'object') {
-        if ('user' in response.data && response.data.user) {
-          userData = response.data.user;
-        } else if ('_id' in response.data) {
-          userData = response.data as AuthUser;
-        } else {
-          throw new Error("Invalid response format from server");
-        }
-      } else {
-        throw new Error("No data returned from server");
+      if (!response.data?.user) {
+        throw new Error("Invalid response format from server");
       }
+      
+      const userData = response.data.user;
       
       // Transform AuthUser to User type
       return {

@@ -18,7 +18,8 @@ const SearchFilter: React.FC<SearchFilterProps> = ({
       className="
         w-full 
         rounded-xl 
-        bg-[#0f172a] 
+        bg-[#1e293b]/70 
+        border border-[#334155] 
         shadow-lg 
         p-5 
         flex flex-wrap items-center gap-4
@@ -31,7 +32,7 @@ const SearchFilter: React.FC<SearchFilterProps> = ({
         onChange={(e) => onSearchChange(e.target.value)}
         className="
           flex-1 
-          bg-[#1e293b] 
+          bg-[#0f172a] 
           border border-[#334155] 
           rounded-full 
           px-4 py-2 
@@ -47,7 +48,7 @@ const SearchFilter: React.FC<SearchFilterProps> = ({
         value={selectedCategory}
         onChange={(e) => onCategoryChange(e.target.value)}
         className="
-          bg-[#1e293b] 
+          bg-[#0f172a] 
           border border-[#334155] 
           rounded-full 
           px-4 py-2 

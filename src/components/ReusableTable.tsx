@@ -162,7 +162,7 @@ const ReusableTable: React.FC<TableProps> = ({
   }
 
   return (
-    <div className="rounded-2xl bg-[#0f172a] shadow-xl p-6">
+    <div className="rounded-2xl bg-[#0f172a] border border-[#334155] shadow-xl p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-white">Data Table</h2>
         {onAdd && (

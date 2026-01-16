@@ -2,14 +2,48 @@ import React from "react";
 import {
   Menu,
   LayoutGrid,
-  Package,
-  ClipboardList,
+  Cog,
   DollarSign,
-  FileText,
   UserCog,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+
+interface CustomIconProps {
+  size?: number;
+  className?: string;
+}
+
+const LetterQIcon: React.FC<CustomIconProps> = ({ size = 20, className = "" }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <circle cx="12" cy="11" r="6" stroke="currentColor" strokeWidth="2" />
+    <path d="M15 15L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const LetterIIcon: React.FC<CustomIconProps> = ({ size = 20, className = "" }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <line x1="12" y1="6" x2="12" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <line x1="9" y1="6" x2="15" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <line x1="9" y1="18" x2="15" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,26 +55,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const location = useLocation();
   const { role } = useAuth();
 
-  // Define main menu items 
   const mainMenuItems = [
-    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard", roles: ['admin', 'inventory_manager'] },
-    { name: "Inventory", icon: Package, path: "/inventory", roles: ['admin', 'inventory_manager'] },
-    { name: "Quotations", icon: ClipboardList, path: "/quotations", roles: ['admin'] },
-    { name: "Invoice", icon: FileText, path: "/invoice", roles: ['admin'] },
+    { name: "Dashboard", icon: LayoutGrid, path: "/dashboard", roles: ['admin'] },
+    { name: "Inventory", icon: Cog, path: "/inventory", roles: ['admin', 'inventory_manager'] },
+    { name: "Quotations", icon: LetterQIcon, path: "/quotations", roles: ['admin'] },
+    { name: "Invoice", icon: LetterIIcon, path: "/invoice", roles: ['admin'] },
     { name: "Finance", icon: DollarSign, path: "/finance", roles: ['admin'] },
   ];
 
-  // Define bottom menu items
   const bottomMenuItems = [
     { name: "User Management", icon: UserCog, path: "/user-management", roles: ['admin'] },
   ];
 
-  // Filter main menu items based on user role
   const filteredMainItems = mainMenuItems.filter(item => 
     item.roles.includes(role || 'inventory_manager')
   );
 
-  // Filter bottom menu items based on user role
   const filteredBottomItems = bottomMenuItems.filter(item => 
     item.roles.includes(role || 'inventory_manager')
   );

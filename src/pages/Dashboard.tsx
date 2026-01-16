@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import DashboardOverview from "../components/DashboardOverview";
-import { User, LayoutGrid } from "lucide-react";
+import UserProfileDropdown from "../components/UserProfileDropdown";
+import { LayoutGrid } from "lucide-react";
 
 const Dashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,20 +20,18 @@ const Dashboard: React.FC = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <div className="flex-1 flex flex-col">
-        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg">
+        <div className="h-16 bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#334155] flex items-center justify-between px-6 shadow-lg relative z-40">
           <div className="flex items-center gap-3">
             <LayoutGrid className="text-blue-400 w-6 h-6" />
             <h1 className="text-xl font-semibold text-gray-200">Patrol Masters ERP Dashboard</h1>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="bg-[#0f172a] border border-[#334155] p-2 rounded-full cursor-pointer hover:bg-[#1e293b] transition">
-              <User className="text-gray-200 w-5 h-5" />
-            </div>
+            <UserProfileDropdown />
           </div>
         </div>
 
-        <main className="flex-1 relative overflow-y-auto p-6 space-y-6">
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
           {loading ? (
             <div className="absolute inset-0 flex justify-center items-center bg-[#0f172a] bg-opacity-90 z-50">
               <div className="text-center text-gray-400">
