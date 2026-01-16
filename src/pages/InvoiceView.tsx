@@ -1,0 +1,125 @@
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import InvoiceCanvas from "../components/InvoiceCanvas";
+import type { InvoiceData } from "../types/invoice";
+import { invoiceService } from "../services/InvoiceService";
+import CustomAlert from "../components/CustomAlert";
+import type { AlertType } from "../components/CustomAlert";
+import ErrorBoundary from "../components/ErrorBoundary";
+
+const InvoiceView: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
+
+  useEffect(() => {
+    const fetchInvoiceData = async () => {
+      if (!id) {
+        setAlert({ type: 'error', message: 'Invoice ID is required' });
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await invoiceService.getById(id);
+        
+        const customerDetails = typeof response.customer === 'object' ? response.customer : undefined;
+        
+        const invoiceData: InvoiceData = {
+          _id: response._id,
+          invoiceId: response.invoiceId,
+          customer: typeof response.customer === 'object' ? (response.customer as any)._id || '' : response.customer || '',
+          customerDetails: customerDetails,
+          items: response.items.map((item: any, index: number) => ({
+            id: (Date.now() + index).toString(),
+            item: item.item?._id || item.item || '',
+            itemName: item.item?.product_name || 'Unknown Item',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total
+          })),
+          subTotal: response.subTotal,
+          discount: response.discount,
+          discountPercentage: response.subTotal > 0 ? (response.discount / response.subTotal) * 100 : 0,
+          totalAmount: response.totalAmount,
+          paymentStatus: response.paymentStatus,
+          paymentMethod: response.paymentMethod,
+          bankDepositDate: response.bankDepositDate ? response.bankDepositDate.split('T')[0] : undefined,
+          issueDate: response.issueDate.split('T')[0],
+          dueDate: response.dueDate.split('T')[0],
+          vehicleNumber: response.vehicleNumber || '',
+          notes: response.notes || '',
+          created_at: response.created_at,
+          updated_at: response.updated_at
+        };
+
+        setInvoiceData(invoiceData);
+      } catch (error) {
+        console.error('Error fetching invoice:', error);
+        setAlert({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to load invoice'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInvoiceData();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!invoiceData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Invoice Not Found</h1>
+          <p className="text-gray-600 mb-6">The requested invoice could not be loaded.</p>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => navigate('/invoice')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              Go to Invoice Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-0">
+      {alert && (
+        <CustomAlert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+          duration={5000}
+        />
+      )}
+
+      {/* Standalone Invoice Display */}
+      <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4">
+        <div className="scale-100 origin-top max-w-4xl mx-auto">
+          <ErrorBoundary>
+            <InvoiceCanvas invoiceData={invoiceData} />
+          </ErrorBoundary>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default InvoiceView;

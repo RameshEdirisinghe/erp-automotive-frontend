@@ -17,6 +17,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Copy,
+  Check,
 } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
@@ -64,6 +66,9 @@ const Invoice: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
+
+  // Add state for copy confirmation
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -695,6 +700,31 @@ const Invoice: React.FC = () => {
     });
   };
 
+  // copy invoice link to clipboard
+  const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
+    
+    navigator.clipboard.writeText(invoiceLink)
+      .then(() => {
+        setCopiedInvoiceId(invoiceId);
+        setAlert({
+          type: 'success',
+          message: `Invoice ${invoiceNumber} link copied to clipboard!`
+        });
+        
+        setTimeout(() => {
+          setCopiedInvoiceId(null);
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy link: ', err);
+        setAlert({
+          type: 'error',
+          message: 'Failed to copy link to clipboard'
+        });
+      });
+  };
+
   const handleOpenManageModal = () => {
     setViewMode('manage');
     setCurrentPage(1);
@@ -1228,7 +1258,7 @@ const Invoice: React.FC = () => {
                                     LKR {invoice.totalAmount.toFixed(2)}
                                   </td>
 
-                                  {/* Actions */}
+                                  {/* Actions - Copy button */}
                                   <td className="px-4 py-3">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
@@ -1245,6 +1275,20 @@ const Invoice: React.FC = () => {
                                         className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
                                       >
                                         <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleCopyInvoiceLink(invoice._id!, invoice.invoiceId)}
+                                        title="Copy Invoice Link"
+                                        className={`p-2 rounded-md transition ${copiedInvoiceId === invoice._id 
+                                          ? 'text-green-400 bg-green-500/20' 
+                                          : 'text-purple-400 hover:bg-purple-500/20'}`}
+                                      >
+                                        {copiedInvoiceId === invoice._id ? (
+                                          <Check className="w-4 h-4" />
+                                        ) : (
+                                          <Copy className="w-4 h-4" />
+                                        )}
                                       </button>
 
                                       <button
