@@ -254,28 +254,27 @@ const Quotation: React.FC = () => {
   // copy quotation link to clipboard
   const handleCopyQuotationLink = (quotationId: string, quotationNumber: string) => {
     const quotationLink = `${window.location.origin}/quotation/view/${quotationId}`;
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(quotationLink)
-      .then(() => {
-        setCopiedQuotationId(quotationId);
-        setAlert({
-          type: 'success',
-          message: `Quotation ${quotationNumber} link copied to clipboard!`
-        });
-        
-        setTimeout(() => {
-          setCopiedQuotationId(null);
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error('Failed to copy link: ', err);
-        setAlert({
-          type: 'error',
-          message: 'Failed to copy link to clipboard'
-        });
+  
+  navigator.clipboard.writeText(quotationLink)
+    .then(() => {
+      setCopiedQuotationId(quotationId);
+      setAlert({
+        type: 'success',
+        message: `quotation ${quotationNumber} link copied to clipboard!`
       });
-  };
+      
+      setTimeout(() => {
+        setCopiedQuotationId(null);
+      }, 2000);
+    })
+    .catch((err) => {
+      console.error('Failed to copy link: ', err);
+      setAlert({
+        type: 'error',
+        message: 'Failed to copy link to clipboard'
+      });
+    });
+};
 
   const statusBadgeMap: Record<
     typeof QuotationStatus[keyof typeof QuotationStatus],
@@ -1004,7 +1003,6 @@ const Quotation: React.FC = () => {
             <div className="w-full overflow-auto p-4">
               <div className="bg-[#1e293b] rounded-lg w-full h-full flex flex-col border border-[#334155] shadow-2xl">
 
-                {/* Modal Body moved inline */}
                 <div className="flex-1 overflow-auto rounded-lg">
                   {isLoadingQuotations ? (
                     <div className="flex items-center justify-center h-64">

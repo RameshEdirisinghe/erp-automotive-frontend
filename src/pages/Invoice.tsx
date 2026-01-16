@@ -701,29 +701,29 @@ const Invoice: React.FC = () => {
   };
 
   // copy invoice link to clipboard
-  const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
-    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
-    
-    navigator.clipboard.writeText(invoiceLink)
-      .then(() => {
-        setCopiedInvoiceId(invoiceId);
-        setAlert({
-          type: 'success',
-          message: `Invoice ${invoiceNumber} link copied to clipboard!`
-        });
-        
-        setTimeout(() => {
-          setCopiedInvoiceId(null);
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error('Failed to copy link: ', err);
-        setAlert({
-          type: 'error',
-          message: 'Failed to copy link to clipboard'
-        });
+ const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
+  const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
+  
+  navigator.clipboard.writeText(invoiceLink)
+    .then(() => {
+      setCopiedInvoiceId(invoiceId);
+      setAlert({
+        type: 'success',
+        message: `Invoice ${invoiceNumber} link copied to clipboard!`
       });
-  };
+      
+      setTimeout(() => {
+        setCopiedInvoiceId(null);
+      }, 2000);
+    })
+    .catch((err) => {
+      console.error('Failed to copy link: ', err);
+      setAlert({
+        type: 'error',
+        message: 'Failed to copy link to clipboard'
+      });
+    });
+};
 
   const handleOpenManageModal = () => {
     setViewMode('manage');

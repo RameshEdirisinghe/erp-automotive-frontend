@@ -8,7 +8,6 @@ import Finance from "../pages/Finance";
 import Invoice from "../pages/Invoice";
 import UserManagement from "../pages/UserManagement";
 import ProtectedRoute from "./ProtectedRoute";
-
 import AdminRoute from "./AdminRoute";
 import InvoiceView from "../pages/InvoiceView";
 import QuotationView from "../pages/QuotationView";
@@ -18,6 +17,10 @@ const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      {/* Public routes */}
+      <Route path="/invoice/view/:id" element={<InvoiceView />} />
+      <Route path="/quotation/view/:id" element={<QuotationView />} />
 
       {/* ADMIN ONLY */}
       <Route path="/" element={
@@ -77,9 +80,6 @@ const AppRoutes: React.FC = () => {
           </RoleRoute>
         </ProtectedRoute>
       } />
-
-      <Route path="/invoice/view/:id" element={<InvoiceView />} />
-      <Route path="/quotation/view/:id" element={<QuotationView />} /> 
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
