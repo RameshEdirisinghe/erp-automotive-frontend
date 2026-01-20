@@ -21,7 +21,7 @@ const AppRoutes: React.FC = () => {
       {/* Public routes */}
       <Route path="/invoice/view/:id" element={<InvoiceView />} />
       <Route path="/quotation/view/:id" element={<QuotationView />} />
-
+      
       {/* ADMIN ONLY */}
       <Route path="/" element={
         <ProtectedRoute>

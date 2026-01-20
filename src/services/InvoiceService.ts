@@ -42,15 +42,15 @@ export const invoiceService = {
   },
 
   // Get all customers
-async getAllCustomers(): Promise<InvoiceCustomer[]> {
-  try {
-    const response = await api.get<InvoiceCustomer[]>("/customers");
-    return response.data;
-  } catch (error: unknown) {
-    console.error('Error fetching customers:', error);
-    return [];
-  }
-},
+  async getAllCustomers(): Promise<InvoiceCustomer[]> {
+    try {
+      const response = await api.get<InvoiceCustomer[]>("/customers");
+      return response.data;
+    } catch (error: unknown) {
+      console.error('Error fetching customers:', error);
+      return [];
+    }
+  },
 
   // Get next invoice ID
   async getNextId(): Promise<string> {
@@ -63,7 +63,7 @@ async getAllCustomers(): Promise<InvoiceCustomer[]> {
     }
   },
 
-  // Get invoice by ID
+  // Get invoice by ID - Public
   async getById(id: string): Promise<InvoiceResponse> {
     try {
       const response = await api.get<InvoiceResponse>(`/invoices/${id}`);

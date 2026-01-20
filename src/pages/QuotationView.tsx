@@ -82,7 +82,10 @@ const QuotationView: React.FC = () => {
         <div className="text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Quotation Not Found</h1>
-          <p className="text-gray-600 mb-6">The requested quotation could not be loaded.</p>
+          <p className="text-gray-600 mb-6">The requested quotation could not be loaded or doesn't exist.</p>
+          <div className="text-sm text-gray-500">
+            Please check the quotation link or contact support.
+          </div>
         </div>
       </div>
     );
@@ -99,9 +102,24 @@ const QuotationView: React.FC = () => {
         />
       )}
 
-      {/* Standalone Quotation Display*/}
-      <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4">
-        <div className="scale-100 origin-top max-w-4xl mx-auto">
+      {/* header for public view */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center">
+            <div className="text-xl font-bold text-gray-800">Quotation #{quotationData.quotationId}</div>
+            <span className="ml-4 px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+              {quotationData.status}
+            </span>
+          </div>
+          <div className="text-sm text-gray-500">
+            Issued: {quotationData.issueDate} | Valid Until: {quotationData.validUntil}
+          </div>
+        </div>
+      </div>
+
+      {/* Standalone Quotation Display */}
+      <div className="flex justify-center items-center min-h-[calc(100vh-64px)] bg-gray-100 p-4">
+        <div className="max-w-4xl mx-auto w-full bg-white rounded-lg shadow-lg overflow-hidden">
           <ErrorBoundary>
             <QuotationCanvas quotationData={quotationData} />
           </ErrorBoundary>

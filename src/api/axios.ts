@@ -10,6 +10,15 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const isLoginPage = window.location.pathname === "/login";
+    
+    // Check if it's a public route
+    const isPublicRoute = 
+      window.location.pathname.includes('/invoice/view/') || 
+      window.location.pathname.includes('/quotation/view/');
+    
+    if (isPublicRoute) {
+      return Promise.reject(error);
+    }
 
     if (
       originalRequest?.url?.includes("/auth/login") ||

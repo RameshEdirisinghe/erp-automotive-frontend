@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import InvoiceCanvas from "../components/InvoiceCanvas";
 import type { InvoiceData } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
@@ -9,7 +9,6 @@ import ErrorBoundary from "../components/ErrorBoundary";
 
 const InvoiceView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
@@ -85,14 +84,9 @@ const InvoiceView: React.FC = () => {
         <div className="text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Invoice Not Found</h1>
-          <p className="text-gray-600 mb-6">The requested invoice could not be loaded.</p>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => navigate('/invoice')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              Go to Invoice Dashboard
-            </button>
+          <p className="text-gray-600 mb-6">The requested invoice could not be loaded or doesn't exist.</p>
+          <div className="text-sm text-gray-500">
+            Please check the invoice link or contact support.
           </div>
         </div>
       </div>
@@ -112,7 +106,7 @@ const InvoiceView: React.FC = () => {
 
       {/* Standalone Invoice Display */}
       <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4">
-        <div className="scale-100 origin-top max-w-4xl mx-auto">
+        <div className="w-[210mm] max-w-full bg-white shadow-lg">
           <ErrorBoundary>
             <InvoiceCanvas invoiceData={invoiceData} />
           </ErrorBoundary>
