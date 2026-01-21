@@ -19,6 +19,7 @@ import {
   Clock,
   Copy,
   Check,
+  Share2,
 } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
@@ -67,7 +68,7 @@ const Invoice: React.FC = () => {
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
 
-  // Add state for copy confirmation
+  // state for copy confirmation
   const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
 
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -558,7 +559,6 @@ const Invoice: React.FC = () => {
     }
   };
 
-  // Helper function to get customer name for display
   const getCustomerDisplay = (invoice: any): string => {
     if (!invoice) return 'Unknown Customer';
 
@@ -701,29 +701,89 @@ const Invoice: React.FC = () => {
   };
 
   // copy invoice link to clipboard
- const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
-  const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
-  
-  navigator.clipboard.writeText(invoiceLink)
-    .then(() => {
-      setCopiedInvoiceId(invoiceId);
-      setAlert({
-        type: 'success',
-        message: `Invoice ${invoiceNumber} link copied to clipboard!`
+  const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
+
+    navigator.clipboard.writeText(invoiceLink)
+      .then(() => {
+        setCopiedInvoiceId(invoiceId);
+        setAlert({
+          type: 'success',
+          message: `Invoice ${invoiceNumber} link copied to clipboard!`
+        });
+
+        setTimeout(() => {
+          setCopiedInvoiceId(null);
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy link: ', err);
+        setAlert({
+          type: 'error',
+          message: 'Failed to copy link to clipboard'
+        });
       });
-      
-      setTimeout(() => {
-        setCopiedInvoiceId(null);
-      }, 2000);
-    })
-    .catch((err) => {
-      console.error('Failed to copy link: ', err);
+  };
+
+  // Handle share invoice link
+  const handleShareInvoice = () => {
+    if (!invoiceData._id) {
       setAlert({
         type: 'error',
-        message: 'Failed to copy link to clipboard'
+        message: 'Please save the invoice first before sharing'
       });
-    });
-};
+      return;
+    }
+
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    
+    if (navigator.share) {
+      navigator.share({
+        title: `Invoice ${invoiceData.invoiceId}`,
+        text: `Check out Invoice ${invoiceData.invoiceId}`,
+        url: invoiceLink,
+      })
+      .then(() => {
+        setAlert({
+          type: 'success',
+          message: 'Invoice shared successfully!'
+        });
+      })
+      .catch((error) => {
+        console.error('Error sharing:', error);
+        navigator.clipboard.writeText(shareText)
+          .then(() => {
+            setAlert({
+              type: 'success',
+              message: 'Invoice link copied to clipboard!'
+            });
+          })
+          .catch((err) => {
+            console.error('Failed to copy link: ', err);
+            setAlert({
+              type: 'error',
+              message: 'Failed to share invoice link'
+            });
+          });
+      });
+    } else {
+      navigator.clipboard.writeText(shareText)
+        .then(() => {
+          setAlert({
+            type: 'success',
+            message: 'Invoice link copied to clipboard!'
+          });
+        })
+        .catch((err) => {
+          console.error('Failed to copy link: ', err);
+          setAlert({
+            type: 'error',
+            message: 'Failed to copy invoice link'
+          });
+        });
+    }
+  };
 
   const handleOpenManageModal = () => {
     setViewMode('manage');
@@ -1429,8 +1489,18 @@ const Invoice: React.FC = () => {
                       </button>
 
                       <button
+                        onClick={handleShareInvoice}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
+                        className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Share Invoice Link"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">Share</span>
+                      </button>
+
+                      <button
                         onClick={downloadPDF}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isGeneratingPDF ? (
@@ -1445,7 +1515,7 @@ const Invoice: React.FC = () => {
 
                       <button
                         onClick={handlePrint}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Printer className="w-4 h-4" />

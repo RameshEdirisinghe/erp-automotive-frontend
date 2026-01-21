@@ -66,7 +66,7 @@ export const invoiceService = {
   // Get invoice by ID - Public
   async getById(id: string): Promise<InvoiceResponse> {
     try {
-      const response = await api.get<InvoiceResponse>(`/invoices/${id}`);
+      const response = await api.get<InvoiceResponse>(`/invoices/public/${id}`);
       return response.data;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || `Failed to fetch invoice ${id}`;

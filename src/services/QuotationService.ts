@@ -60,7 +60,6 @@ export const quotationService = {
   // Get quotation by ID - Public
   async getById(id: string): Promise<QuotationResponse> {
     try {
-      // public endpoint for quotation view
       const response = await api.get<QuotationResponse>(`/quotations/public/${id}`);
       return response.data;
     } catch (error: unknown) {
