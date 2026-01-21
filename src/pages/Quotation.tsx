@@ -18,6 +18,8 @@ import {
   Clock,
   Search,
   AlertTriangle,
+  Copy,
+  Check,
 } from "lucide-react";
 import QuotationForm from "../components/quotation/QuotationForm";
 import QuotationCanvas from "../components/quotation/QuotationCanvas";
@@ -64,6 +66,8 @@ const Quotation: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
+
+  const [copiedQuotationId, setCopiedQuotationId] = useState<string | null>(null);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -247,6 +251,31 @@ const Quotation: React.FC = () => {
     }
   };
 
+  // copy quotation link to clipboard
+  const handleCopyQuotationLink = (quotationId: string, quotationNumber: string) => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationId}`;
+  
+  navigator.clipboard.writeText(quotationLink)
+    .then(() => {
+      setCopiedQuotationId(quotationId);
+      setAlert({
+        type: 'success',
+        message: `quotation ${quotationNumber} link copied to clipboard!`
+      });
+      
+      setTimeout(() => {
+        setCopiedQuotationId(null);
+      }, 2000);
+    })
+    .catch((err) => {
+      console.error('Failed to copy link: ', err);
+      setAlert({
+        type: 'error',
+        message: 'Failed to copy link to clipboard'
+      });
+    });
+};
+
   const statusBadgeMap: Record<
     typeof QuotationStatus[keyof typeof QuotationStatus],
     { cls: string; icon: React.ReactNode }
@@ -387,7 +416,6 @@ const Quotation: React.FC = () => {
 
       const backendData = prepareQuotationForSave(quotationData);
       console.log(backendData);
-
 
       if (quotationData._id) {
         setAlert({
@@ -975,7 +1003,6 @@ const Quotation: React.FC = () => {
             <div className="w-full overflow-auto p-4">
               <div className="bg-[#1e293b] rounded-lg w-full h-full flex flex-col border border-[#334155] shadow-2xl">
 
-                {/* Modal Body moved inline */}
                 <div className="flex-1 overflow-auto rounded-lg">
                   {isLoadingQuotations ? (
                     <div className="flex items-center justify-center h-64">
@@ -1063,7 +1090,7 @@ const Quotation: React.FC = () => {
                                     LKR {quotation.totalAmount.toFixed(2)}
                                   </td>
 
-                                  {/* Actions */}
+                                  {/* Actions - Copy button */}
                                   <td className="px-2 md:px-4 py-3">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
@@ -1080,6 +1107,20 @@ const Quotation: React.FC = () => {
                                         className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
                                       >
                                         <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleCopyQuotationLink(quotation._id!, quotation.quotationId)}
+                                        title="Copy Quotation Link"
+                                        className={`p-2 rounded-md transition ${copiedQuotationId === quotation._id 
+                                          ? 'text-green-400 bg-green-500/20' 
+                                          : 'text-purple-400 hover:bg-purple-500/20'}`}
+                                      >
+                                        {copiedQuotationId === quotation._id ? (
+                                          <Check className="w-4 h-4" />
+                                        ) : (
+                                          <Copy className="w-4 h-4" />
+                                        )}
                                       </button>
 
                                       <button

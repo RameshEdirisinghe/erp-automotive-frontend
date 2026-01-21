@@ -196,16 +196,17 @@ const Finance: React.FC = () => {
           message: 'Generating PDF... Please wait.'
         });
 
-        // Create a temporary container for the invoice
+        // temporary container for the invoice
         const tempContainer = document.createElement('div');
         tempContainer.style.position = 'fixed';
         tempContainer.style.left = '0';
         tempContainer.style.top = '0';
         tempContainer.style.width = '210mm';
-        tempContainer.style.height = '297mm';
+        tempContainer.style.minHeight = '297mm';
         tempContainer.style.backgroundColor = 'white';
         tempContainer.style.zIndex = '9999';
         tempContainer.style.opacity = '0';
+        tempContainer.style.overflow = 'hidden';
         document.body.appendChild(tempContainer);
 
         // Render the InvoiceCanvas
@@ -234,26 +235,25 @@ const Finance: React.FC = () => {
           notes: invoice.notes,
         };
 
-        // Temporarily render the invoice
         const { createRoot } = await import('react-dom/client');
         const root = createRoot(tempContainer);
 
         root.render(
           <div
-            ref={invoiceRef}
             style={{
               width: '210mm',
               minHeight: '297mm',
               backgroundColor: 'white',
-              padding: '20mm',
-              boxSizing: 'border-box'
+              padding: '0',
+              margin: '0',
+              boxSizing: 'border-box',
+              overflow: 'hidden'
             }}
           >
             <InvoiceCanvas invoiceData={invoiceData} />
           </div>
         );
 
-        // Wait for rendering
         await new Promise(resolve => setTimeout(resolve, 500));
 
         const invoiceElement = tempContainer.firstChild as HTMLElement;
@@ -261,29 +261,36 @@ const Finance: React.FC = () => {
 
         // Generate PDF
         const canvas = await html2canvas(invoiceElement, {
-          scale: 2,
+          scale: 3,
           useCORS: true,
           allowTaint: true,
           logging: false,
           backgroundColor: '#ffffff',
           width: 794,
           height: 1123,
+          windowWidth: 794,
+          windowHeight: 1123
         });
 
-        const jpegData = canvas.toDataURL('image/jpeg', 1.0);
+        const imgData = canvas.toDataURL('image/png', 1.0);
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
-          format: 'a4'
+          format: 'a4',
+          compress: true
         });
 
-        const pdfWidth = 210;
-        const pdfHeight = 297;
-        const imgWidth = pdfWidth;
-        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-        const finalHeight = imgHeight > pdfHeight ? pdfHeight : imgHeight;
-
-        pdf.addImage(jpegData, 'JPEG', 0, 0, imgWidth, finalHeight);
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        const imgWidth = pageWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        // Center the image on the page
+        const xOffset = 0;
+        const yOffset = 0;
+        
+        pdf.addImage(imgData, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
         pdf.save(`invoice-${invoice.invoiceId}.pdf`);
 
         // Cleanup
