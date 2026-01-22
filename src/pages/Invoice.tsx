@@ -85,6 +85,9 @@ const Invoice: React.FC = () => {
     onConfirm: () => { },
   });
 
+  // Add state for share dropdown
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
+
   const getInitialInvoiceData = (): InvoiceData => ({
     invoiceId: "",
     customer: "",
@@ -508,7 +511,6 @@ const Invoice: React.FC = () => {
 
       // Map invoices with customer details
       const normalized = sortedInvoices.map((invoice: any) => {
-        // Extract customer details
         let customer = invoice.customer;
         let customerName = '';
 
@@ -726,7 +728,7 @@ const Invoice: React.FC = () => {
   };
 
   // Handle share invoice link
-  const handleShareInvoice = () => {
+  const handleShareInvoice = async () => {
     if (!invoiceData._id) {
       setAlert({
         type: 'error',
@@ -738,51 +740,81 @@ const Invoice: React.FC = () => {
     const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
     const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
     
+    // copy the link to clipboard automatically
+    try {
+      await navigator.clipboard.writeText(invoiceLink);
+    } catch (err) {
+      console.error('Failed to copy link: ', err);
+    }
+
+    // using Web Share API
     if (navigator.share) {
-      navigator.share({
-        title: `Invoice ${invoiceData.invoiceId}`,
-        text: `Check out Invoice ${invoiceData.invoiceId}`,
-        url: invoiceLink,
-      })
-      .then(() => {
+      try {
+        await navigator.share({
+          title: `Invoice ${invoiceData.invoiceId}`,
+          text: `Check out Invoice ${invoiceData.invoiceId}`,
+          url: invoiceLink,
+        });
         setAlert({
           type: 'success',
-          message: 'Invoice shared successfully!'
+          message: 'Link also copied to clipboard.'
         });
-      })
-      .catch((error) => {
-        console.error('Error sharing:', error);
-        navigator.clipboard.writeText(shareText)
-          .then(() => {
-            setAlert({
-              type: 'success',
-              message: 'Invoice link copied to clipboard!'
-            });
-          })
-          .catch((err) => {
-            console.error('Failed to copy link: ', err);
-            setAlert({
-              type: 'error',
-              message: 'Failed to share invoice link'
-            });
-          });
-      });
-    } else {
-      navigator.clipboard.writeText(shareText)
-        .then(() => {
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          setShowShareDropdown(true);
+        } else {
           setAlert({
-            type: 'success',
+            type: 'info',
             message: 'Invoice link copied to clipboard!'
           });
-        })
-        .catch((err) => {
-          console.error('Failed to copy link: ', err);
-          setAlert({
-            type: 'error',
-            message: 'Failed to copy invoice link'
-          });
-        });
+        }
+      }
+    } else {
+      // Web Share API not supported
+      setShowShareDropdown(true);
+      setAlert({
+        type: 'success',
+        message: 'Invoice link copied to clipboard! Select sharing option below.'
+      });
     }
+  };
+
+  // Share via apps
+  const shareViaWhatsApp = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaEmail = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const subject = `Invoice ${invoiceData.invoiceId}`;
+    const body = `Please find the invoice here: ${invoiceLink}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaMessenger = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Check out Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
+    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(invoiceLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaSMS = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
+    window.open(`sms:?body=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaTelegram = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(invoiceLink)}&text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
   };
 
   const handleOpenManageModal = () => {
@@ -1122,6 +1154,17 @@ const Invoice: React.FC = () => {
     await proceedWithPrint();
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareDropdown && !(event.target as Element).closest('.share-dropdown-container')) {
+        setShowShareDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareDropdown]);
+
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
@@ -1149,6 +1192,90 @@ const Invoice: React.FC = () => {
           }}
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
+
+        {/* Share Dropdown */}
+        {showShareDropdown && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#1e293b] rounded-lg p-4 w-64 share-dropdown-container">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-200">Share Invoice</h3>
+                <button
+                  onClick={() => setShowShareDropdown(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={shareViaWhatsApp}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition"
+                >
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">WA</span>
+                  </div>
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  onClick={shareViaEmail}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">@</span>
+                  </div>
+                  <span>Email</span>
+                </button>
+                <button
+                  onClick={shareViaMessenger}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-500 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">f</span>
+                  </div>
+                  <span>Messenger</span>
+                </button>
+                <button
+                  onClick={shareViaSMS}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition"
+                >
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">SMS</span>
+                  </div>
+                  <span>SMS</span>
+                </button>
+                <button
+                  onClick={shareViaTelegram}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-400/20 hover:bg-blue-400/30 text-blue-300 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">TG</span>
+                  </div>
+                  <span>Telegram</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+                    navigator.clipboard.writeText(invoiceLink);
+                    setAlert({
+                      type: 'success',
+                      message: 'Invoice link copied to clipboard again!'
+                    });
+                    setShowShareDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition"
+                >
+                  <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <Copy className="w-4 h-4 text-white" />
+                  </div>
+                  <span>Copy Link Again</span>
+                </button>
+              </div>
+              <div className="mt-4 text-sm text-gray-400 text-center">
+                Link is already copied to clipboard
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6 relative z-40">
           <div className="flex items-center gap-3">
@@ -1488,15 +1615,17 @@ const Invoice: React.FC = () => {
                         )}
                       </button>
 
-                      <button
-                        onClick={handleShareInvoice}
-                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
-                        className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Share Invoice Link"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Share</span>
-                      </button>
+                      <div className="relative share-dropdown-container">
+                        <button
+                          onClick={handleShareInvoice}
+                          disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Share Invoice Link"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Share</span>
+                        </button>
+                      </div>
 
                       <button
                         onClick={downloadPDF}

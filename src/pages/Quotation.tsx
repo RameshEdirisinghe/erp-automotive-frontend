@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  Share2,
 } from "lucide-react";
 import QuotationForm from "../components/quotation/QuotationForm";
 import QuotationCanvas from "../components/quotation/QuotationCanvas";
@@ -82,6 +83,9 @@ const Quotation: React.FC = () => {
     message: "",
     onConfirm: () => { },
   });
+
+  // Add state for share dropdown
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
 
   const getInitialQuotationData = (): QuotationData => ({
     quotationId: "",
@@ -255,26 +259,116 @@ const Quotation: React.FC = () => {
   const handleCopyQuotationLink = (quotationId: string, quotationNumber: string) => {
     const quotationLink = `${window.location.origin}/quotation/view/${quotationId}`;
   
-  navigator.clipboard.writeText(quotationLink)
-    .then(() => {
-      setCopiedQuotationId(quotationId);
-      setAlert({
-        type: 'success',
-        message: `quotation ${quotationNumber} link copied to clipboard!`
+    navigator.clipboard.writeText(quotationLink)
+      .then(() => {
+        setCopiedQuotationId(quotationId);
+        setAlert({
+          type: 'success',
+          message: `Quotation ${quotationNumber} link copied to clipboard!`
+        });
+        
+        setTimeout(() => {
+          setCopiedQuotationId(null);
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy link: ', err);
+        setAlert({
+          type: 'error',
+          message: 'Failed to copy link to clipboard'
+        });
       });
-      
-      setTimeout(() => {
-        setCopiedQuotationId(null);
-      }, 2000);
-    })
-    .catch((err) => {
-      console.error('Failed to copy link: ', err);
+  };
+
+  // share quotation link
+  const handleShareQuotation = async () => {
+    if (!quotationData._id) {
       setAlert({
         type: 'error',
-        message: 'Failed to copy link to clipboard'
+        message: 'Please save the quotation first before sharing'
       });
-    });
-};
+      return;
+    }
+
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const shareText = `Quotation ${quotationData.quotationId} - View online: ${quotationLink}`;
+    
+    // copy the link to clipboard
+    try {
+      await navigator.clipboard.writeText(quotationLink);
+    } catch (err) {
+      console.error('Failed to copy link: ', err);
+    }
+
+    // using Web Share API
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Quotation ${quotationData.quotationId}`,
+          text: `Check out Quotation ${quotationData.quotationId}`,
+          url: quotationLink,
+        });
+        setAlert({
+          type: 'success',
+          message: 'Link also copied to clipboard.'
+        });
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          setShowShareDropdown(true);
+        } else {
+          setAlert({
+            type: 'info',
+            message: 'Quotation link copied to clipboard!'
+          });
+        }
+      }
+    } else {
+      // Web Share API not supported
+      setShowShareDropdown(true);
+      setAlert({
+        type: 'success',
+        message: 'Quotation link copied to clipboard! Select sharing option below.'
+      });
+    }
+  };
+
+  // Share via apps
+  const shareViaWhatsApp = () => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const shareText = `Quotation ${quotationData.quotationId} - View online: ${quotationLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaEmail = () => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const subject = `Quotation ${quotationData.quotationId}`;
+    const body = `Please find the quotation here: ${quotationLink}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaMessenger = () => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const shareText = `Check out Quotation ${quotationData.quotationId}: ${quotationLink}`;
+    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(quotationLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaSMS = () => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const shareText = `Quotation ${quotationData.quotationId}: ${quotationLink}`;
+    window.open(`sms:?body=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaTelegram = () => {
+    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+    const shareText = `Quotation ${quotationData.quotationId} - View online: ${quotationLink}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(quotationLink)}&text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
 
   const statusBadgeMap: Record<
     typeof QuotationStatus[keyof typeof QuotationStatus],
@@ -893,6 +987,17 @@ const Quotation: React.FC = () => {
     await proceedWithPrint();
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareDropdown && !(event.target as Element).closest('.share-dropdown-container')) {
+        setShowShareDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareDropdown]);
+
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
@@ -920,6 +1025,90 @@ const Quotation: React.FC = () => {
           }}
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
+
+        {/* Share Dropdown */}
+        {showShareDropdown && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#1e293b] rounded-lg p-4 w-64 share-dropdown-container">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-200">Share Quotation</h3>
+                <button
+                  onClick={() => setShowShareDropdown(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={shareViaWhatsApp}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition"
+                >
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">WA</span>
+                  </div>
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  onClick={shareViaEmail}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">@</span>
+                  </div>
+                  <span>Email</span>
+                </button>
+                <button
+                  onClick={shareViaMessenger}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-500 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">f</span>
+                  </div>
+                  <span>Messenger</span>
+                </button>
+                <button
+                  onClick={shareViaSMS}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition"
+                >
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">SMS</span>
+                  </div>
+                  <span>SMS</span>
+                </button>
+                <button
+                  onClick={shareViaTelegram}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-400/20 hover:bg-blue-400/30 text-blue-300 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">TG</span>
+                  </div>
+                  <span>Telegram</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
+                    navigator.clipboard.writeText(quotationLink);
+                    setAlert({
+                      type: 'success',
+                      message: 'Quotation link copied to clipboard again!'
+                    });
+                    setShowShareDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition"
+                >
+                  <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <Copy className="w-4 h-4 text-white" />
+                  </div>
+                  <span>Copy Link Again</span>
+                </button>
+              </div>
+              <div className="mt-4 text-sm text-gray-400 text-center">
+                Link is already copied to clipboard
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6 relative z-40">
           <div className="flex items-center gap-3">
@@ -1019,7 +1208,6 @@ const Quotation: React.FC = () => {
                       {/* Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse text-sm">
-                          {/* Sticky Header */}
                           <thead className="sticky top-0 z-10">
                             <tr className="bg-[#1e293b] border-b border-[#243244]">
                               <th className="text-left px-2 md:px-4 py-3 font-semibold text-gray-300">
@@ -1260,9 +1448,21 @@ const Quotation: React.FC = () => {
                         )}
                       </button>
 
+                      <div className="relative share-dropdown-container">
+                        <button
+                          onClick={handleShareQuotation}
+                          disabled={!quotationData._id || isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Share Quotation Link"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Share</span>
+                        </button>
+                      </div>
+
                       <button
                         onClick={downloadPDF}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!quotationData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isGeneratingPDF ? (
@@ -1277,7 +1477,7 @@ const Quotation: React.FC = () => {
 
                       <button
                         onClick={handlePrint}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!quotationData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Printer className="w-4 h-4" />
