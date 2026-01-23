@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
+import PaymentModal from "../components/PaymentModal";
 import type {
   InvoiceData,
   InvoiceItem,
@@ -31,8 +32,10 @@ import type {
   InvoiceResponse
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
-import { PaymentStatus, PaymentMethod } from "../types/invoice";
+import { PaymentStatus, PaymentMethod, type PaymentStatus as PaymentStatusType } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
+import { financeService } from "../services/FinanceService";
+import type { FinancePaymentData } from "../types/finance";
 import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -49,6 +52,7 @@ const Invoice: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -67,6 +71,19 @@ const Invoice: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
+
+  // Payment modal states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: PaymentMethod.CASH as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  const [paymentModalTriggeredByForm, setPaymentModalTriggeredByForm] = useState(false);
 
   // state for copy confirmation
   const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
@@ -158,13 +175,20 @@ const Invoice: React.FC = () => {
       setInventoryItems(items as InvoiceInventoryItem[]);
 
       const nextId = await invoiceService.getNextId();
-      setInvoiceData({
+      const initialInvoiceData = {
         ...getInitialInvoiceData(),
         invoiceId: nextId
-      });
+      };
+      setInvoiceData(initialInvoiceData);
       lastSavedRef.current = null;
       setIsDirty(false);
       lastSavedAtRef.current = null;
+
+      // Update paymentDetails
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: initialInvoiceData.paymentMethod
+      }));
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -180,6 +204,113 @@ const Invoice: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Update paymentDetails when invoiceData changes
+  useEffect(() => {
+    setPaymentDetails(prev => ({
+      ...prev,
+      method: invoiceData.paymentMethod
+    }));
+  }, [invoiceData.paymentMethod]);
+
+  // payment submission from invoice form
+  const handlePaymentSubmit = async () => {
+    if (!invoiceData._id) {
+      setAlert({
+        type: 'error',
+        message: 'Please save the invoice first before recording payment'
+      });
+      return;
+    }
+
+    try {
+      setIsProcessingPayment(true);
+
+      // First get the next transaction ID
+      const transactionId = await financeService.getNextId();
+      const paymentMethod = paymentDetails.method || invoiceData.paymentMethod;
+      const paymentData: FinancePaymentData = {
+        transactionId: transactionId,
+        transactionDate: new Date(paymentDetails.transactionDate).toISOString(),
+        paymentMethod: {
+          type: paymentMethod,
+          bankName: paymentDetails.bankName || 'N/A',
+          accountNumber: paymentDetails.accountNumber || 'N/A',
+          transactionRef: paymentDetails.transactionRef || 'PAY-' + Date.now(),
+        },
+        invoice: {
+          invoiceId: invoiceData.invoiceId,
+        },
+        amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
+      };
+
+      console.log('Creating payment transaction:', paymentData);
+
+      // Create finance transaction
+      await financeService.create(paymentData);
+      await invoiceService.updatePaymentStatus(invoiceData._id, 'Completed');
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.COMPLETED
+      }));
+
+      setAlert({
+        type: 'success',
+        message: 'Payment successfully recorded for invoice ' + invoiceData.invoiceId
+      });
+
+      // Reset payment modal state
+      setShowPaymentModal(false);
+      setPaymentModalTriggeredByForm(false);
+      setPaymentDetails({
+        method: invoiceData.paymentMethod,
+        bankName: "",
+        accountNumber: "",
+        transactionRef: "",
+        amount: "",
+        transactionDate: new Date().toISOString().split('T')[0]
+      });
+
+      if (viewMode === 'manage') {
+        fetchAllInvoices();
+      }
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      const errorMessage = error?.response?.data?.message ||
+        error?.message ||
+        'Failed to process payment. Please try again.';
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
+      
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.PENDING
+      }));
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // payment status change from invoice form
+  const handlePaymentStatusChange = (status: PaymentStatusType, invoice: InvoiceData) => {
+    if (status === PaymentStatus.COMPLETED && !paymentModalTriggeredByForm && !isProcessingPayment) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: invoice.paymentMethod, 
+        amount: (invoice.totalAmount > 0 ? invoice.totalAmount : 0).toFixed(2)
+      }));
+      setShowPaymentModal(true);
+      setPaymentModalTriggeredByForm(true);
+    }
+  };
+
+  // payment completion from form
+  const handlePaymentComplete = async () => {
+    await handlePaymentSubmit();
+  };
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
@@ -272,7 +403,6 @@ const Invoice: React.FC = () => {
   }, [isDirty]);
 
   const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
-
     const formatDateToISO = (dateString: string): string => {
       if (!dateString) return new Date().toISOString();
 
@@ -624,7 +754,6 @@ const Invoice: React.FC = () => {
       if (typeof fullInvoiceData.customer === 'object' && fullInvoiceData.customer !== null) {
         customerDetails = fullInvoiceData.customer;
       } else if (typeof fullInvoiceData.customer === 'string') {
-
         const foundCustomer = allCustomers.find(c => c._id === fullInvoiceData.customer);
         if (foundCustomer) {
           customerDetails = foundCustomer;
@@ -1193,6 +1322,44 @@ const Invoice: React.FC = () => {
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
 
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPaymentModalTriggeredByForm(false);
+            
+            if (!isProcessingPayment && invoiceData.paymentStatus === PaymentStatus.COMPLETED) {
+              setInvoiceData(prev => ({
+                ...prev,
+                paymentStatus: PaymentStatus.PENDING
+              }));
+            }
+          }}
+          selectedInvoice={{
+            invoiceId: invoiceData.invoiceId,
+            _id: invoiceData._id || '',
+            totalAmount: invoiceData.totalAmount,
+            customer: invoiceData.customerDetails as InvoiceCustomer | undefined,
+            paymentStatus: invoiceData.paymentStatus,
+            paymentMethod: invoiceData.paymentMethod,
+            bankDepositDate: invoiceData.bankDepositDate,
+            issueDate: invoiceData.issueDate,
+            dueDate: invoiceData.dueDate,
+            vehicleNumber: invoiceData.vehicleNumber,
+            notes: invoiceData.notes,
+            items: invoiceData.items,
+            subTotal: invoiceData.subTotal,
+            discount: invoiceData.discount,
+            created_at: invoiceData.created_at || '',
+            updated_at: invoiceData.updated_at || ''
+          }}
+          paymentDetails={paymentDetails}
+          onPaymentDetailsChange={setPaymentDetails}
+          onSubmit={handlePaymentSubmit}
+          isProcessing={isProcessingPayment}
+        />
+
         {/* Share Dropdown */}
         {showShareDropdown && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1547,6 +1714,9 @@ const Invoice: React.FC = () => {
                       onRemoveItem={handleRemoveItem}
                       onUpdateItem={handleUpdateItem}
                       inventoryItems={inventoryItems}
+                      onPaymentStatusChange={handlePaymentStatusChange}
+                      onPaymentComplete={handlePaymentComplete}
+                      isProcessingPayment={isProcessingPayment}
                     />
                   </ErrorBoundary>
                 )}
