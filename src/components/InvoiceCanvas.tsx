@@ -39,7 +39,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   };
 
   // Company VAT number 
-  const companyVatNumber = "VAT123456789";
+  const companyVatNumber = "218231209 - 7000";
 
   useEffect(() => {
     if (templateRef.current) {
