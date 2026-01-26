@@ -22,66 +22,97 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string>('');
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const handlePrint = async () => {
     if (!selectedInvoice || !invoiceRef.current) return;
 
     try {
+      setIsPrinting(true);
       setError('');
       
-      const invoiceContainer = invoiceRef.current;
-      const originalTransform = invoiceContainer.style.transform;
-      const originalTransformOrigin = invoiceContainer.style.transformOrigin;
-      const originalWidth = invoiceContainer.style.width;
-      const originalHeight = invoiceContainer.style.height;
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'fixed';
+      tempContainer.style.left = '0';
+      tempContainer.style.top = '0';
+      tempContainer.style.width = '210mm';
+      tempContainer.style.minHeight = '297mm';
+      tempContainer.style.backgroundColor = 'white';
+      tempContainer.style.zIndex = '9999';
+      tempContainer.style.opacity = '0';
+      tempContainer.style.overflow = 'hidden';
+      document.body.appendChild(tempContainer);
 
-      invoiceContainer.style.transform = 'none';
-      invoiceContainer.style.transformOrigin = 'top left';
-      invoiceContainer.style.width = '210mm';
-      invoiceContainer.style.height = '297mm';
-      invoiceContainer.style.position = 'fixed';
-      invoiceContainer.style.left = '0';
-      invoiceContainer.style.top = '0';
-      invoiceContainer.style.zIndex = '9999';
+      const { createRoot } = await import('react-dom/client');
+      const root = createRoot(tempContainer);
 
-      void invoiceContainer.offsetHeight;
+      root.render(
+        <div
+          style={{
+            width: '210mm',
+            minHeight: '297mm',
+            backgroundColor: 'white',
+            padding: '0',
+            margin: '0',
+            boxSizing: 'border-box',
+            overflow: 'hidden'
+          }}
+        >
+          <InvoiceCanvas
+            invoiceData={{
+              invoiceId: selectedInvoice.invoiceId,
+              customer: selectedInvoice.customer?._id || "",
+              customerDetails: selectedInvoice.customer,
+              items: selectedInvoice.items.map(item => ({
+                id: item._id || Date.now().toString(),
+                item: item.item?._id || "",
+                itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                total: item.total,
+              })),
+              subTotal: selectedInvoice.subTotal,
+              discount: selectedInvoice.discount,
+              discountPercentage: selectedInvoice.discount > 0 ? (selectedInvoice.discount / selectedInvoice.subTotal) * 100 : 0,
+              totalAmount: selectedInvoice.totalAmount,
+              paymentStatus: selectedInvoice.paymentStatus,
+              paymentMethod: selectedInvoice.paymentMethod,
+              bankDepositDate: selectedInvoice.bankDepositDate,
+              issueDate: selectedInvoice.issueDate,
+              dueDate: selectedInvoice.dueDate,
+              vehicleNumber: selectedInvoice.vehicleNumber,
+              notes: selectedInvoice.notes,
+            }}
+          />
+        </div>
+      );
 
-      const images = invoiceContainer.getElementsByTagName('img');
-      const imageLoadPromises = Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
-        });
-      });
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      await Promise.all(imageLoadPromises);
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const invoiceElement = tempContainer.firstChild as HTMLElement;
+      if (!invoiceElement) throw new Error('Invoice element not found');
 
-      const canvas = await html2canvas(invoiceContainer, {
-        scale: 2,
+      const canvas = await html2canvas(invoiceElement, {
+        scale: 3,
         useCORS: true,
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
         width: 794,
         height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123
       });
 
-      invoiceContainer.style.transform = originalTransform;
-      invoiceContainer.style.transformOrigin = originalTransformOrigin;
-      invoiceContainer.style.width = originalWidth;
-      invoiceContainer.style.height = originalHeight;
-      invoiceContainer.style.position = '';
-      invoiceContainer.style.left = '';
-      invoiceContainer.style.top = '';
-      invoiceContainer.style.zIndex = '';
+      root.unmount();
+      document.body.removeChild(tempContainer);
 
       const imageData = canvas.toDataURL('image/png', 1.0);
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         setError("Popup blocked! Please allow popups for this site to print.");
+        setIsPrinting(false);
         return;
       }
 
@@ -99,22 +130,20 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
               body {
                 margin: 0;
                 padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
                 width: 210mm;
                 height: 297mm;
-              }
-              
-              .print-container {
-                width: 100%;
-                height: 100%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
               }
               
               .invoice-image {
-                width: 210mm;
-                height: 297mm;
+                width: 100%;
+                height: 100%;
                 object-fit: contain;
+                display: block;
               }
               
               @media print {
@@ -123,21 +152,15 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
                   padding: 0 !important;
                 }
                 
-                .print-container {
-                  page-break-inside: avoid;
-                  page-break-after: avoid;
-                }
-                
                 .invoice-image {
                   page-break-inside: avoid;
+                  page-break-after: avoid;
                 }
               }
             </style>
           </head>
           <body>
-            <div class="print-container">
-              <img src="${imageData}" alt="Invoice ${selectedInvoice.invoiceId}" class="invoice-image" />
-            </div>
+            <img src="${imageData}" alt="Invoice ${selectedInvoice.invoiceId}" class="invoice-image" />
             <script>
               window.onload = function() {
                 setTimeout(function() {
@@ -145,15 +168,8 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
                   setTimeout(function() {
                     window.close();
                   }, 1000);
-                }, 500);
+                }, 300);
               };
-              
-              setTimeout(function() {
-                window.print();
-                setTimeout(function() {
-                  window.close();
-                }, 1000);
-              }, 2000);
             </script>
           </body>
         </html>
@@ -162,12 +178,13 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
       printWindow.document.open();
       printWindow.document.write(printHtml);
       printWindow.document.close();
-      printWindow.focus();
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(errorMessage);
+      setError(`Print error: ${errorMessage}`);
       console.error('Error printing invoice:', err);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -177,14 +194,14 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
       onClose={onClose}
       title={`Invoice Preview - ${selectedInvoice?.invoiceId}`}
       icon={<FileText className="w-5 h-5 text-blue-400" />}
-      size="xl"
-      className="!h-[90vh] flex flex-col"
+      size="full"
+      className="max-h-[95vh] max-w-[95vw] flex flex-col"
     >
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Action Buttons */}
-        <div className="flex justify-between items-center gap-3">
+        <div className="flex-shrink-0 flex justify-between items-center gap-3 mb-4 px-2">
           <p className="text-sm text-gray-400">
-            Invoice details displayed below
+            Viewing invoice details
           </p>
           <div className="flex gap-2">
             <Button
@@ -192,10 +209,10 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
               size="md"
               icon={<Printer className="w-4 h-4" />}
               onClick={handlePrint}
-              disabled={isGeneratingPDF || !selectedInvoice}
+              disabled={isGeneratingPDF || !selectedInvoice || isPrinting}
+              isLoading={isPrinting}
             >
-              <span className="hidden sm:inline">Print</span>
-              <span className="sm:hidden">Print</span>
+              Print
             </Button>
             <Button
               variant="primary"
@@ -203,71 +220,82 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
               icon={<Download className="w-4 h-4" />}
               onClick={() => selectedInvoice && onDownloadInvoice(selectedInvoice)}
               isLoading={isGeneratingPDF}
-              disabled={isGeneratingPDF || !selectedInvoice}
+              disabled={isGeneratingPDF || !selectedInvoice || isPrinting}
             >
-              <span className="hidden sm:inline">Download PDF</span>
-              <span className="sm:hidden">PDF</span>
+              Download PDF
             </Button>
           </div>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-            <div className="text-sm text-red-400">{error}</div>
-          </div>
-        )}
-
-        {/* Invoice Preview */}
-        {isGeneratingPDF ? (
-          <div className="flex-1 flex items-center justify-center bg-[#0f172a] rounded-lg border border-[#334155]">
-            <LoadingSpinner size="lg" text="Generating PDF..." />
-          </div>
-        ) : (
-          <div className="flex-1 overflow-auto bg-[#0f172a] rounded-lg border border-[#334155] p-4">
-            <div className="bg-white rounded-lg h-full w-full overflow-auto">
-              {selectedInvoice && (
-                <div
-                  ref={invoiceRef}
-                  className="w-[210mm] min-h-[297mm] bg-white mx-auto p-8 shadow-lg"
-                  style={{
-                    boxSizing: 'border-box',
-                    transform: 'scale(0.8)',
-                    transformOrigin: 'top center'
-                  }}
-                >
-                  <InvoiceCanvas
-                    invoiceData={{
-                      invoiceId: selectedInvoice.invoiceId,
-                      customer: selectedInvoice.customer?._id || "",
-                      customerDetails: selectedInvoice.customer,
-                      items: selectedInvoice.items.map(item => ({
-                        id: item._id || Date.now().toString(),
-                        item: item.item?._id || "",
-                        itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
-                        quantity: item.quantity,
-                        unitPrice: item.unitPrice,
-                        total: item.total,
-                      })),
-                      subTotal: selectedInvoice.subTotal,
-                      discount: selectedInvoice.discount,
-                      discountPercentage: selectedInvoice.discount > 0 ? (selectedInvoice.discount / selectedInvoice.subTotal) * 100 : 0,
-                      totalAmount: selectedInvoice.totalAmount,
-                      paymentStatus: selectedInvoice.paymentStatus,
-                      paymentMethod: selectedInvoice.paymentMethod,
-                      bankDepositDate: selectedInvoice.bankDepositDate,
-                      issueDate: selectedInvoice.issueDate,
-                      dueDate: selectedInvoice.dueDate,
-                      vehicleNumber: selectedInvoice.vehicleNumber,
-                      notes: selectedInvoice.notes,
-                    }}
-                  />
-                </div>
-              )}
+          <div className="flex-shrink-0 bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4 mx-2">
+            <div className="flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <div className="text-sm text-red-400">{error}</div>
             </div>
           </div>
         )}
+
+        {/* Invoice Preview Container */}
+        <div className="flex-1 overflow-auto bg-gray-800 rounded-lg min-h-0 px-1">
+          {isGeneratingPDF ? (
+            <div className="h-full flex items-center justify-center">
+              <LoadingSpinner size="lg" text="Generating PDF..." />
+            </div>
+          ) : selectedInvoice ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <div
+                ref={invoiceRef}
+                className="bg-white overflow-auto"
+                style={{
+                  width: '210mm',
+                  minHeight: '297mm',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  transform: 'scale(0.9)',
+                  transformOrigin: 'center',
+                  overflow: 'hidden'
+                }}
+              >
+                <InvoiceCanvas
+                  invoiceData={{
+                    invoiceId: selectedInvoice.invoiceId,
+                    customer: selectedInvoice.customer?._id || "",
+                    customerDetails: selectedInvoice.customer,
+                    items: selectedInvoice.items.map(item => ({
+                      id: item._id || Date.now().toString(),
+                      item: item.item?._id || "",
+                      itemName: item.item?.product_name || item.item?.itemName || item.item?.description || "Item",
+                      quantity: item.quantity,
+                      unitPrice: item.unitPrice,
+                      total: item.total,
+                    })),
+                    subTotal: selectedInvoice.subTotal,
+                    discount: selectedInvoice.discount,
+                    discountPercentage: selectedInvoice.discount > 0 ? (selectedInvoice.discount / selectedInvoice.subTotal) * 100 : 0,
+                    totalAmount: selectedInvoice.totalAmount,
+                    paymentStatus: selectedInvoice.paymentStatus,
+                    paymentMethod: selectedInvoice.paymentMethod,
+                    bankDepositDate: selectedInvoice.bankDepositDate,
+                    issueDate: selectedInvoice.issueDate,
+                    dueDate: selectedInvoice.dueDate,
+                    vehicleNumber: selectedInvoice.vehicleNumber,
+                    notes: selectedInvoice.notes,
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No invoice selected</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </Modal>
   );

@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import type { InvoiceData, InvoiceItem } from "../types/invoice";
 import type { InventoryItem } from "../types/inventory";
-import { PaymentMethod, PaymentStatus } from "../types/invoice";
+import { PaymentMethod, PaymentStatus, type PaymentStatusType } from "../types/invoice";
 import { useCustomerSearch, type Customer } from "../hooks/useCustomerSearch";
 import { useItemSearch } from "../hooks/useItemSearch";
 import { CustomerSearchAndManagement } from "./invoice/CustomerSearchAndManagement";
@@ -10,15 +10,19 @@ import { CustomerFormModal } from "./invoice/CustomerFormModal";
 import { ItemSearchAndAdd } from "./invoice/ItemSearchAndAdd";
 import { InvoiceItemsList } from "./invoice/InvoiceItemsList";
 import { InvoiceSummary } from "./invoice/InvoiceSummary";
+import PaymentModal from "../components/PaymentModal";
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
   onFieldChange: (field: keyof InvoiceData, value: string | number | boolean | Date) => void;
-  onCustomerIdChange: (customerId: string, customerDetails?: unknown) => void;
+  onCustomerIdChange: (customerId: string, customerDetails?: Customer) => void;
   onAddItem: (item: Omit<InvoiceItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
   inventoryItems: InventoryItem[];
+  onPaymentStatusChange?: (status: PaymentStatusType, invoice: InvoiceData) => void;
+  onPaymentComplete?: () => Promise<void>;
+  isProcessingPayment?: boolean;
 }
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({
@@ -29,6 +33,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onRemoveItem,
   onUpdateItem,
   inventoryItems,
+  onPaymentStatusChange,
+  onPaymentComplete,
+  isProcessingPayment = false,
 }) => {
   const {
     filteredCustomers,
@@ -64,6 +71,19 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerModalMode, setCustomerModalMode] = useState<'view' | 'create' | 'edit' | null>(null);
 
+  // Payment modal states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: invoiceData.paymentMethod as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  const [paymentModalTriggered, setPaymentModalTriggered] = useState(false);
+
   const itemTotal = useMemo(() => {
     const qty = parseInt(newItem.quantity) || 0;
     const price = parseFloat(newItem.unitPrice) || 0;
@@ -86,6 +106,41 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
     return null;
   }, [newItem.item, newItem.quantity, inventoryItems, invoiceData.items]);
+
+  const handlePaymentStatusChange = useCallback((value: string) => {
+    const newStatus = value as PaymentStatusType;
+   
+    onFieldChange('paymentStatus', newStatus);
+    
+    if (newStatus === PaymentStatus.COMPLETED && !paymentModalTriggered && !isProcessingPayment) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: invoiceData.paymentMethod,
+        amount: (invoiceData.totalAmount > 0 ? invoiceData.totalAmount : 0).toFixed(2)
+      }));
+      
+      // Show payment modal
+      setShowPaymentModal(true);
+      setPaymentModalTriggered(true);
+      if (onPaymentStatusChange) {
+        onPaymentStatusChange(newStatus, invoiceData);
+      }
+    } else if (newStatus !== PaymentStatus.COMPLETED) {
+      setPaymentModalTriggered(false);
+    }
+  }, [invoiceData, onFieldChange, onPaymentStatusChange, paymentModalTriggered, isProcessingPayment]);
+
+  useEffect(() => {
+    if (invoiceData.paymentStatus !== PaymentStatus.COMPLETED) {
+      setPaymentModalTriggered(false);
+    }
+  }, [invoiceData.paymentStatus]);
+
+  useEffect(() => {
+    if (isProcessingPayment && showPaymentModal) {
+      setShowPaymentModal(false);
+    }
+  }, [isProcessingPayment, showPaymentModal]);
 
   const handleItemSelect = useCallback((inventoryItem: InventoryItem) => {
     setNewItem({ 
@@ -227,6 +282,41 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   }, [invoiceData.customerDetails, selectedCustomer, setCustomerSearchTerm]);
 
+  const handlePaymentModalClose = () => {
+    setShowPaymentModal(false);
+    setPaymentModalTriggered(false);
+    
+    if (!isProcessingPayment && invoiceData.paymentStatus === PaymentStatus.COMPLETED) {
+      onFieldChange('paymentStatus', PaymentStatus.PENDING);
+    }
+  };
+
+  const handlePaymentCompleteInternal = async () => {
+    setShowPaymentModal(false);
+    setPaymentModalTriggered(true);
+    
+    if (onPaymentComplete) {
+      await onPaymentComplete();
+    }
+  };
+
+  const convertToInvoiceCustomer = (customer: Customer | null) => {
+    if (!customer) return undefined;
+    
+    return {
+      _id: customer._id,
+      fullName: customer.fullName,
+      phone: customer.phone,
+      email: customer.email || '',
+      vatNumber: customer.vatNumber || '',
+      address: customer.address || '',
+      customerCode: customer.customerCode || '',
+      vehicle_number: customer.vehicle_number,
+      vehicle_model: customer.vehicle_model,
+      year_of_manufacture: customer.year_of_manufacture
+    };
+  };
+
   return (
     <div className="space-y-6">
       {customerModalMode === 'view' && selectedCustomer && (
@@ -248,6 +338,35 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           onSubmit={handleCustomerFormSubmit}
         />
       )}
+
+      {/* Payment Modal */}
+      <PaymentModal
+        key={`payment-modal-${showPaymentModal}`}
+        isOpen={showPaymentModal}
+        onClose={handlePaymentModalClose}
+        selectedInvoice={{
+          invoiceId: invoiceData.invoiceId,
+          _id: invoiceData._id || '',
+          totalAmount: invoiceData.totalAmount,
+          customer: convertToInvoiceCustomer(selectedCustomer),
+          paymentStatus: invoiceData.paymentStatus,
+          paymentMethod: invoiceData.paymentMethod,
+          bankDepositDate: invoiceData.bankDepositDate,
+          issueDate: invoiceData.issueDate,
+          dueDate: invoiceData.dueDate,
+          vehicleNumber: invoiceData.vehicleNumber,
+          notes: invoiceData.notes,
+          items: invoiceData.items,
+          subTotal: invoiceData.subTotal,
+          discount: invoiceData.discount,
+          created_at: invoiceData.created_at || '',
+          updated_at: invoiceData.updated_at || ''
+        }}
+        paymentDetails={paymentDetails}
+        onPaymentDetailsChange={setPaymentDetails}
+        onSubmit={handlePaymentCompleteInternal}
+        isProcessing={isProcessingPayment}
+      />
 
       <div className="bg-[#1e293b] rounded-lg p-5 border border-[#334155]">
         <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Invoice</h2>
@@ -316,7 +435,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               </label>
               <select
                 value={invoiceData.paymentStatus}
-                onChange={(e) => onFieldChange('paymentStatus', e.target.value)}
+                onChange={(e) => handlePaymentStatusChange(e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >

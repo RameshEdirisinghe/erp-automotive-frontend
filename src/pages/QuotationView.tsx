@@ -82,7 +82,10 @@ const QuotationView: React.FC = () => {
         <div className="text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Quotation Not Found</h1>
-          <p className="text-gray-600 mb-6">The requested quotation could not be loaded.</p>
+          <p className="text-gray-600 mb-6">The requested quotation could not be loaded or doesn't exist.</p>
+          <div className="text-sm text-gray-500">
+            Please check the quotation link or contact support.
+          </div>
         </div>
       </div>
     );
@@ -99,9 +102,15 @@ const QuotationView: React.FC = () => {
         />
       )}
 
-      {/* Standalone Quotation Display*/}
-      <div className="flex justify-center items-center min-h-screen bg-gray-100 p-4">
-        <div className="scale-100 origin-top max-w-4xl mx-auto">
+      <div className="flex justify-center items-center min-h-screen bg-gray-50 p-4">
+        <div 
+          className="bg-white shadow-lg"
+          style={{
+            width: '210mm',
+            minHeight: '297mm',
+            margin: '0 auto',
+          }}
+        >
           <ErrorBoundary>
             <QuotationCanvas quotationData={quotationData} />
           </ErrorBoundary>
