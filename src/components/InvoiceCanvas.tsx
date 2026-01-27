@@ -17,7 +17,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
       const year = date.getFullYear();
       return `${day}/${month}/${year}`;
     } catch {
-      return dateString.split('T')[0] || "02/05/2025";
+      return dateString.split('T')[0] || "02/05/2025";    
     }
   };
 
