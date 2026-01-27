@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import type { InvoiceData, InvoiceItem } from "../types/invoice";
+import type { InvoiceData, InvoiceItem, InvoiceCustomer } from "../types/invoice";
 import type { InventoryItem } from "../types/inventory";
 import { PaymentMethod, PaymentStatus, type PaymentStatusType } from "../types/invoice";
 import { useCustomerSearch, type Customer } from "../hooks/useCustomerSearch";
@@ -300,8 +300,21 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   };
 
-  const convertToInvoiceCustomer = (customer: Customer | null) => {
-    if (!customer) return undefined;
+  const convertToInvoiceCustomer = (customer: Customer | null): InvoiceCustomer => {
+    if (!customer) {
+      return {
+        _id: '',
+        fullName: '',
+        phone: '',
+        email: '',
+        vatNumber: '',
+        address: undefined,
+        customerCode: '',
+        vehicle_number: '',
+        vehicle_model: '',
+        year_of_manufacture: undefined
+      };
+    }
     
     return {
       _id: customer._id,
@@ -309,7 +322,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       phone: customer.phone,
       email: customer.email || '',
       vatNumber: customer.vatNumber || '',
-      address: customer.address || '',
+      address: typeof customer.address === 'string' ? undefined : customer.address,
       customerCode: customer.customerCode || '',
       vehicle_number: customer.vehicle_number,
       vehicle_model: customer.vehicle_model,

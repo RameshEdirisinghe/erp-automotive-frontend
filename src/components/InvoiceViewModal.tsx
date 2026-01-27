@@ -194,7 +194,7 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
       onClose={onClose}
       title={`Invoice Preview - ${selectedInvoice?.invoiceId}`}
       icon={<FileText className="w-5 h-5 text-blue-400" />}
-      size="full"
+      size="xl"
       className="max-h-[95vh] max-w-[95vw] flex flex-col"
     >
       <div className="flex-1 flex flex-col min-h-0">

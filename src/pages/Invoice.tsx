@@ -32,7 +32,7 @@ import type {
   InvoiceResponse
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
-import { PaymentStatus, PaymentMethod, type PaymentStatus as PaymentStatusType } from "../types/invoice";
+import { PaymentStatus, PaymentMethod } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
 import { financeService } from "../services/FinanceService";
 import type { FinancePaymentData } from "../types/finance";
@@ -291,7 +291,7 @@ const Invoice: React.FC = () => {
   };
 
   // payment status change from invoice form
-  const handlePaymentStatusChange = (status: PaymentStatusType, invoice: InvoiceData) => {
+  const handlePaymentStatusChange = (status: typeof PaymentStatus[keyof typeof PaymentStatus], invoice: InvoiceData) => {
     if (status === PaymentStatus.COMPLETED && !paymentModalTriggeredByForm && !isProcessingPayment) {
       setPaymentDetails(prev => ({
         ...prev,
@@ -838,7 +838,7 @@ const Invoice: React.FC = () => {
           setCopiedInvoiceId(null);
         }, 2000);
       })
-      .catch((err) => {
+      .catch(() => {
         setAlert({
           type: 'error',
           message: 'Failed to copy link to clipboard'
@@ -857,7 +857,6 @@ const Invoice: React.FC = () => {
     }
 
     const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
-    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
     
     // copy the link to clipboard automatically
     try {
@@ -916,7 +915,6 @@ const Invoice: React.FC = () => {
 
   const shareViaMessenger = () => {
     const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
-    const shareText = `Check out Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
     window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(invoiceLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
     setShowShareDropdown(false);
   };
@@ -1327,7 +1325,7 @@ const Invoice: React.FC = () => {
             invoiceId: invoiceData.invoiceId,
             _id: invoiceData._id || '',
             totalAmount: invoiceData.totalAmount,
-            customer: invoiceData.customerDetails as InvoiceCustomer | undefined,
+            customer: invoiceData.customerDetails as InvoiceCustomer,
             paymentStatus: invoiceData.paymentStatus,
             paymentMethod: invoiceData.paymentMethod,
             bankDepositDate: invoiceData.bankDepositDate,
