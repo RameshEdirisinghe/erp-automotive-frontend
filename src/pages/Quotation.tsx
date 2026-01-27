@@ -165,7 +165,6 @@ const Quotation: React.FC = () => {
       lastSavedAtRef.current = null;
 
     } catch (error) {
-      console.error('Error loading data:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load data'
@@ -272,7 +271,6 @@ const Quotation: React.FC = () => {
         }, 2000);
       })
       .catch((err) => {
-        console.error('Failed to copy link: ', err);
         setAlert({
           type: 'error',
           message: 'Failed to copy link to clipboard'
@@ -297,7 +295,7 @@ const Quotation: React.FC = () => {
     try {
       await navigator.clipboard.writeText(quotationLink);
     } catch (err) {
-      console.error('Failed to copy link: ', err);
+      // Silent fail for clipboard copy
     }
 
     // using Web Share API
@@ -314,7 +312,6 @@ const Quotation: React.FC = () => {
         });
       } catch (error: any) {
         if (error.name !== 'AbortError') {
-          console.error('Error sharing:', error);
           setShowShareDropdown(true);
         } else {
           setAlert({
@@ -509,7 +506,6 @@ const Quotation: React.FC = () => {
       setIsSaving(true);
 
       const backendData = prepareQuotationForSave(quotationData);
-      console.log(backendData);
 
       if (quotationData._id) {
         setAlert({
@@ -550,7 +546,6 @@ const Quotation: React.FC = () => {
 
       return true;
     } catch (error) {
-      console.error('Error saving quotation:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save quotation'
@@ -570,7 +565,6 @@ const Quotation: React.FC = () => {
       );
       setAllQuotations(sortedQuotations);
     } catch (error) {
-      console.error('Error fetching quotations:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load quotations'
@@ -650,7 +644,6 @@ const Quotation: React.FC = () => {
           });
           fetchAllQuotations();
         } catch (error) {
-          console.error('Error deleting quotation:', error);
           setAlert({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to delete quotation'
@@ -802,7 +795,6 @@ const Quotation: React.FC = () => {
           message: 'PDF downloaded successfully!'
         });
       } catch (error) {
-        console.error('Error generating PDF:', error);
         setAlert({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
@@ -959,7 +951,6 @@ const Quotation: React.FC = () => {
         setIsGeneratingPDF(false);
 
       } catch (error) {
-        console.error('Error preparing print:', error);
         setAlert({
           type: 'error',
           message: 'Failed to prepare print. Please try again.'

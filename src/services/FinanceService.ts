@@ -17,7 +17,6 @@ export const financeService = {
       return response.data;
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error('Error fetching finance transactions:', error.message);
         throw new Error(error.message);
       }
       throw new Error("Failed to fetch finance transactions");
@@ -28,8 +27,6 @@ export const financeService = {
   async getNextId(): Promise<string> {
     try {
       const response = await api.get<NextTransactionIdResponse>("/finance/next-id");
-      console.log(response.data.nextTransactionId);
-      
       return response.data.nextTransactionId;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
@@ -55,7 +52,6 @@ export const financeService = {
   // Create new transaction
   async create(transactionData: FinancePaymentData): Promise<FinanceTransaction> {
     try {
-    
       const formattedData = {
         ...transactionData,
         transactionDate: new Date(transactionData.transactionDate).toISOString(),

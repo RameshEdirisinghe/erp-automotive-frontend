@@ -10,7 +10,7 @@ interface CustomConfirmProps {
   cancelText?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  type?: "warning" | "danger" | "info"; // affects color accent
+  type?: "warning" | "danger" | "info";
 }
 
 const CustomConfirm: React.FC<CustomConfirmProps> = ({

@@ -38,10 +38,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     if (isOpen) {
       const fetchNextId = async () => {
         try {
-          const nextId = await financeService.getNextId();
-          console.log('Next Finance ID:', nextId);
+          await financeService.getNextId();
         } catch (error) {
-          console.error('Error fetching next ID:', error);
+          // Silent error handling for next ID
         }
       };
       fetchNextId();
