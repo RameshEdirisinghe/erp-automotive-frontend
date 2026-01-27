@@ -57,10 +57,10 @@ export const quotationService = {
     }
   },
 
-  // Get quotation by ID
+  // Get quotation by ID - Public
   async getById(id: string): Promise<QuotationResponse> {
     try {
-      const response = await api.get<QuotationResponse>(`/quotations/${id}`);
+      const response = await api.get<QuotationResponse>(`/quotations/public/${id}`);
       return response.data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
@@ -86,7 +86,6 @@ export const quotationService = {
   // Create new quotation
   async create(quotationData: BackendQuotationData): Promise<QuotationResponse> {
     try {
-      
       const response = await api.post<QuotationResponse>("/quotations", quotationData);
       return response.data;
     } catch (error: unknown) {

@@ -17,9 +17,13 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Copy,
+  Check,
+  Share2,
 } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
+import PaymentModal from "../components/PaymentModal";
 import type {
   InvoiceData,
   InvoiceItem,
@@ -28,8 +32,10 @@ import type {
   InvoiceResponse
 } from "../types/invoice";
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
-import { PaymentStatus, PaymentMethod } from "../types/invoice";
+import { PaymentStatus, PaymentMethod, type PaymentStatus as PaymentStatusType } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
+import { financeService } from "../services/FinanceService";
+import type { FinancePaymentData } from "../types/finance";
 import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -46,6 +52,7 @@ const Invoice: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -65,6 +72,22 @@ const Invoice: React.FC = () => {
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
 
+  // Payment modal states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: PaymentMethod.CASH as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  const [paymentModalTriggeredByForm, setPaymentModalTriggeredByForm] = useState(false);
+
+  // state for copy confirmation
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
+
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title?: string;
@@ -78,6 +101,9 @@ const Invoice: React.FC = () => {
     message: "",
     onConfirm: () => { },
   });
+
+  // Add state for share dropdown
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
 
   const getInitialInvoiceData = (): InvoiceData => ({
     invoiceId: "",
@@ -149,13 +175,20 @@ const Invoice: React.FC = () => {
       setInventoryItems(items as InvoiceInventoryItem[]);
 
       const nextId = await invoiceService.getNextId();
-      setInvoiceData({
+      const initialInvoiceData = {
         ...getInitialInvoiceData(),
         invoiceId: nextId
-      });
+      };
+      setInvoiceData(initialInvoiceData);
       lastSavedRef.current = null;
       setIsDirty(false);
       lastSavedAtRef.current = null;
+
+      // Update paymentDetails
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: initialInvoiceData.paymentMethod
+      }));
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -171,6 +204,113 @@ const Invoice: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Update paymentDetails when invoiceData changes
+  useEffect(() => {
+    setPaymentDetails(prev => ({
+      ...prev,
+      method: invoiceData.paymentMethod
+    }));
+  }, [invoiceData.paymentMethod]);
+
+  // payment submission from invoice form
+  const handlePaymentSubmit = async () => {
+    if (!invoiceData._id) {
+      setAlert({
+        type: 'error',
+        message: 'Please save the invoice first before recording payment'
+      });
+      return;
+    }
+
+    try {
+      setIsProcessingPayment(true);
+
+      // First get the next transaction ID
+      const transactionId = await financeService.getNextId();
+      const paymentMethod = paymentDetails.method || invoiceData.paymentMethod;
+      const paymentData: FinancePaymentData = {
+        transactionId: transactionId,
+        transactionDate: new Date(paymentDetails.transactionDate).toISOString(),
+        paymentMethod: {
+          type: paymentMethod,
+          bankName: paymentDetails.bankName || 'N/A',
+          accountNumber: paymentDetails.accountNumber || 'N/A',
+          transactionRef: paymentDetails.transactionRef || 'PAY-' + Date.now(),
+        },
+        invoice: {
+          invoiceId: invoiceData.invoiceId,
+        },
+        amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
+      };
+
+      console.log('Creating payment transaction:', paymentData);
+
+      // Create finance transaction
+      await financeService.create(paymentData);
+      await invoiceService.updatePaymentStatus(invoiceData._id, 'Completed');
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.COMPLETED
+      }));
+
+      setAlert({
+        type: 'success',
+        message: 'Payment successfully recorded for invoice ' + invoiceData.invoiceId
+      });
+
+      // Reset payment modal state
+      setShowPaymentModal(false);
+      setPaymentModalTriggeredByForm(false);
+      setPaymentDetails({
+        method: invoiceData.paymentMethod,
+        bankName: "",
+        accountNumber: "",
+        transactionRef: "",
+        amount: "",
+        transactionDate: new Date().toISOString().split('T')[0]
+      });
+
+      if (viewMode === 'manage') {
+        fetchAllInvoices();
+      }
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      const errorMessage = error?.response?.data?.message ||
+        error?.message ||
+        'Failed to process payment. Please try again.';
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
+      
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.PENDING
+      }));
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // payment status change from invoice form
+  const handlePaymentStatusChange = (status: PaymentStatusType, invoice: InvoiceData) => {
+    if (status === PaymentStatus.COMPLETED && !paymentModalTriggeredByForm && !isProcessingPayment) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: invoice.paymentMethod, 
+        amount: (invoice.totalAmount > 0 ? invoice.totalAmount : 0).toFixed(2)
+      }));
+      setShowPaymentModal(true);
+      setPaymentModalTriggeredByForm(true);
+    }
+  };
+
+  // payment completion from form
+  const handlePaymentComplete = async () => {
+    await handlePaymentSubmit();
+  };
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
@@ -263,7 +403,6 @@ const Invoice: React.FC = () => {
   }, [isDirty]);
 
   const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
-
     const formatDateToISO = (dateString: string): string => {
       if (!dateString) return new Date().toISOString();
 
@@ -502,7 +641,6 @@ const Invoice: React.FC = () => {
 
       // Map invoices with customer details
       const normalized = sortedInvoices.map((invoice: any) => {
-        // Extract customer details
         let customer = invoice.customer;
         let customerName = '';
 
@@ -553,7 +691,6 @@ const Invoice: React.FC = () => {
     }
   };
 
-  // Helper function to get customer name for display
   const getCustomerDisplay = (invoice: any): string => {
     if (!invoice) return 'Unknown Customer';
 
@@ -617,7 +754,6 @@ const Invoice: React.FC = () => {
       if (typeof fullInvoiceData.customer === 'object' && fullInvoiceData.customer !== null) {
         customerDetails = fullInvoiceData.customer;
       } else if (typeof fullInvoiceData.customer === 'string') {
-
         const foundCustomer = allCustomers.find(c => c._id === fullInvoiceData.customer);
         if (foundCustomer) {
           customerDetails = foundCustomer;
@@ -693,6 +829,121 @@ const Invoice: React.FC = () => {
         }
       }
     });
+  };
+
+  // copy invoice link to clipboard
+  const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
+
+    navigator.clipboard.writeText(invoiceLink)
+      .then(() => {
+        setCopiedInvoiceId(invoiceId);
+        setAlert({
+          type: 'success',
+          message: `Invoice ${invoiceNumber} link copied to clipboard!`
+        });
+
+        setTimeout(() => {
+          setCopiedInvoiceId(null);
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy link: ', err);
+        setAlert({
+          type: 'error',
+          message: 'Failed to copy link to clipboard'
+        });
+      });
+  };
+
+  // Handle share invoice link
+  const handleShareInvoice = async () => {
+    if (!invoiceData._id) {
+      setAlert({
+        type: 'error',
+        message: 'Please save the invoice first before sharing'
+      });
+      return;
+    }
+
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    
+    // copy the link to clipboard automatically
+    try {
+      await navigator.clipboard.writeText(invoiceLink);
+    } catch (err) {
+      console.error('Failed to copy link: ', err);
+    }
+
+    // using Web Share API
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Invoice ${invoiceData.invoiceId}`,
+          text: `Check out Invoice ${invoiceData.invoiceId}`,
+          url: invoiceLink,
+        });
+        setAlert({
+          type: 'success',
+          message: 'Link also copied to clipboard.'
+        });
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          setShowShareDropdown(true);
+        } else {
+          setAlert({
+            type: 'info',
+            message: 'Invoice link copied to clipboard!'
+          });
+        }
+      }
+    } else {
+      // Web Share API not supported
+      setShowShareDropdown(true);
+      setAlert({
+        type: 'success',
+        message: 'Invoice link copied to clipboard! Select sharing option below.'
+      });
+    }
+  };
+
+  // Share via apps
+  const shareViaWhatsApp = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaEmail = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const subject = `Invoice ${invoiceData.invoiceId}`;
+    const body = `Please find the invoice here: ${invoiceLink}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaMessenger = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Check out Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
+    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(invoiceLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaSMS = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
+    window.open(`sms:?body=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaTelegram = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(invoiceLink)}&text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
   };
 
   const handleOpenManageModal = () => {
@@ -1032,6 +1283,17 @@ const Invoice: React.FC = () => {
     await proceedWithPrint();
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareDropdown && !(event.target as Element).closest('.share-dropdown-container')) {
+        setShowShareDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareDropdown]);
+
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
@@ -1059,6 +1321,128 @@ const Invoice: React.FC = () => {
           }}
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
+
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPaymentModalTriggeredByForm(false);
+            
+            if (!isProcessingPayment && invoiceData.paymentStatus === PaymentStatus.COMPLETED) {
+              setInvoiceData(prev => ({
+                ...prev,
+                paymentStatus: PaymentStatus.PENDING
+              }));
+            }
+          }}
+          selectedInvoice={{
+            invoiceId: invoiceData.invoiceId,
+            _id: invoiceData._id || '',
+            totalAmount: invoiceData.totalAmount,
+            customer: invoiceData.customerDetails as InvoiceCustomer | undefined,
+            paymentStatus: invoiceData.paymentStatus,
+            paymentMethod: invoiceData.paymentMethod,
+            bankDepositDate: invoiceData.bankDepositDate,
+            issueDate: invoiceData.issueDate,
+            dueDate: invoiceData.dueDate,
+            vehicleNumber: invoiceData.vehicleNumber,
+            notes: invoiceData.notes,
+            items: invoiceData.items,
+            subTotal: invoiceData.subTotal,
+            discount: invoiceData.discount,
+            created_at: invoiceData.created_at || '',
+            updated_at: invoiceData.updated_at || ''
+          }}
+          paymentDetails={paymentDetails}
+          onPaymentDetailsChange={setPaymentDetails}
+          onSubmit={handlePaymentSubmit}
+          isProcessing={isProcessingPayment}
+        />
+
+        {/* Share Dropdown */}
+        {showShareDropdown && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#1e293b] rounded-lg p-4 w-64 share-dropdown-container">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-200">Share Invoice</h3>
+                <button
+                  onClick={() => setShowShareDropdown(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={shareViaWhatsApp}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition"
+                >
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">WA</span>
+                  </div>
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  onClick={shareViaEmail}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">@</span>
+                  </div>
+                  <span>Email</span>
+                </button>
+                <button
+                  onClick={shareViaMessenger}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-500 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">f</span>
+                  </div>
+                  <span>Messenger</span>
+                </button>
+                <button
+                  onClick={shareViaSMS}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition"
+                >
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">SMS</span>
+                  </div>
+                  <span>SMS</span>
+                </button>
+                <button
+                  onClick={shareViaTelegram}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-400/20 hover:bg-blue-400/30 text-blue-300 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">TG</span>
+                  </div>
+                  <span>Telegram</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+                    navigator.clipboard.writeText(invoiceLink);
+                    setAlert({
+                      type: 'success',
+                      message: 'Invoice link copied to clipboard again!'
+                    });
+                    setShowShareDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition"
+                >
+                  <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <Copy className="w-4 h-4 text-white" />
+                  </div>
+                  <span>Copy Link Again</span>
+                </button>
+              </div>
+              <div className="mt-4 text-sm text-gray-400 text-center">
+                Link is already copied to clipboard
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6 relative z-40">
           <div className="flex items-center gap-3">
@@ -1228,7 +1612,7 @@ const Invoice: React.FC = () => {
                                     LKR {invoice.totalAmount.toFixed(2)}
                                   </td>
 
-                                  {/* Actions */}
+                                  {/* Actions - Copy button */}
                                   <td className="px-4 py-3">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
@@ -1245,6 +1629,20 @@ const Invoice: React.FC = () => {
                                         className="p-2 rounded-md text-green-400 hover:bg-green-500/20 transition"
                                       >
                                         <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleCopyInvoiceLink(invoice._id!, invoice.invoiceId)}
+                                        title="Copy Invoice Link"
+                                        className={`p-2 rounded-md transition ${copiedInvoiceId === invoice._id 
+                                          ? 'text-green-400 bg-green-500/20' 
+                                          : 'text-purple-400 hover:bg-purple-500/20'}`}
+                                      >
+                                        {copiedInvoiceId === invoice._id ? (
+                                          <Check className="w-4 h-4" />
+                                        ) : (
+                                          <Copy className="w-4 h-4" />
+                                        )}
                                       </button>
 
                                       <button
@@ -1316,6 +1714,9 @@ const Invoice: React.FC = () => {
                       onRemoveItem={handleRemoveItem}
                       onUpdateItem={handleUpdateItem}
                       inventoryItems={inventoryItems}
+                      onPaymentStatusChange={handlePaymentStatusChange}
+                      onPaymentComplete={handlePaymentComplete}
+                      isProcessingPayment={isProcessingPayment}
                     />
                   </ErrorBoundary>
                 )}
@@ -1384,9 +1785,21 @@ const Invoice: React.FC = () => {
                         )}
                       </button>
 
+                      <div className="relative share-dropdown-container">
+                        <button
+                          onClick={handleShareInvoice}
+                          disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Share Invoice Link"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Share</span>
+                        </button>
+                      </div>
+
                       <button
                         onClick={downloadPDF}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isGeneratingPDF ? (
@@ -1401,7 +1814,7 @@ const Invoice: React.FC = () => {
 
                       <button
                         onClick={handlePrint}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Printer className="w-4 h-4" />
