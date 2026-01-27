@@ -191,7 +191,6 @@ const Invoice: React.FC = () => {
       }));
 
     } catch (error) {
-      console.error('Error loading data:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load data'
@@ -244,8 +243,6 @@ const Invoice: React.FC = () => {
         amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
       };
 
-      console.log('Creating payment transaction:', paymentData);
-
       // Create finance transaction
       await financeService.create(paymentData);
       await invoiceService.updatePaymentStatus(invoiceData._id, 'Completed');
@@ -276,7 +273,6 @@ const Invoice: React.FC = () => {
       }
 
     } catch (error: any) {
-      console.error('Error processing payment:', error);
       const errorMessage = error?.response?.data?.message ||
         error?.message ||
         'Failed to process payment. Please try again.';
@@ -589,8 +585,6 @@ const Invoice: React.FC = () => {
 
       return true;
     } catch (error: any) {
-      console.error('Error saving invoice:', error);
-
       let errorMessage = 'Failed to save invoice';
       if (error.response) {
         // Server responded with error
@@ -626,7 +620,7 @@ const Invoice: React.FC = () => {
         const customers = await invoiceService.getAllCustomers();
         setAllCustomers(customers);
       } catch (customerError) {
-        console.warn('Could not fetch customers:', customerError);
+        // Silent fail for customer fetch
       }
 
       // Fetch all invoices
@@ -681,7 +675,6 @@ const Invoice: React.FC = () => {
 
       setAllInvoices(normalized);
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load invoices'
@@ -721,7 +714,7 @@ const Invoice: React.FC = () => {
           const response = await invoiceService.getById(invoiceData._id);
           fullInvoiceData = response as any;
         } catch (fetchError) {
-          console.warn('Could not fetch full invoice details, using summary data:', fetchError);
+          // Use summary data if full fetch fails
         }
       }
 
@@ -797,7 +790,6 @@ const Invoice: React.FC = () => {
         message: `Invoice ${fullInvoiceData.invoiceId} loaded successfully`
       });
     } catch (error) {
-      console.error('Error loading invoice:', error);
       setAlert({
         type: 'error',
         message: 'Failed to load invoice data'
@@ -821,7 +813,6 @@ const Invoice: React.FC = () => {
           });
           fetchAllInvoices();
         } catch (error) {
-          console.error('Error deleting invoice:', error);
           setAlert({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to delete invoice'
@@ -848,7 +839,6 @@ const Invoice: React.FC = () => {
         }, 2000);
       })
       .catch((err) => {
-        console.error('Failed to copy link: ', err);
         setAlert({
           type: 'error',
           message: 'Failed to copy link to clipboard'
@@ -873,7 +863,7 @@ const Invoice: React.FC = () => {
     try {
       await navigator.clipboard.writeText(invoiceLink);
     } catch (err) {
-      console.error('Failed to copy link: ', err);
+      // Silent fail for clipboard copy
     }
 
     // using Web Share API
@@ -890,7 +880,6 @@ const Invoice: React.FC = () => {
         });
       } catch (error: any) {
         if (error.name !== 'AbortError') {
-          console.error('Error sharing:', error);
           setShowShareDropdown(true);
         } else {
           setAlert({
@@ -1098,7 +1087,6 @@ const Invoice: React.FC = () => {
           message: 'PDF downloaded successfully!'
         });
       } catch (error) {
-        console.error('Error generating PDF:', error);
         setAlert({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
@@ -1255,7 +1243,6 @@ const Invoice: React.FC = () => {
         setIsGeneratingPDF(false);
 
       } catch (error) {
-        console.error('Error preparing print:', error);
         setAlert({
           type: 'error',
           message: 'Failed to prepare print. Please try again.'

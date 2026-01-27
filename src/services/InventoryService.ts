@@ -14,8 +14,6 @@ export const inventoryService = {
       return response.data;
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error('Error fetching inventory items:', error.message);
-        
         if (error.message.includes('401')) {
           window.location.href = '/login';
         }
@@ -64,8 +62,6 @@ export const inventoryService = {
 
   // Update inventory item
   async update(id: string, updateData: Partial<InventoryItem>): Promise<InventoryItem> {
-    console.log(updateData);
-    
     try {
       const response = await api.put<InventoryItem>(`/inventory-items/${id}`, updateData);
       return response.data;
@@ -101,8 +97,6 @@ export const inventoryService = {
         discontinued: items.filter(item => item.status === 'discontinued').length,
       };
     } catch (error: unknown) {
-      console.error('Error in getStats:', error);
-
       return {
         totalItems: 0,
         inStock: 0,
