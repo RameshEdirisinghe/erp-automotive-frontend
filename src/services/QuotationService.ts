@@ -23,7 +23,6 @@ export const quotationService = {
       return response.data;
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error('Error fetching quotations:', error.message);
         if (error.message.includes('401')) {
           window.location.href = '/login';
         }
@@ -39,7 +38,6 @@ export const quotationService = {
       const response = await api.get<QuotationCustomer[]>("/customers");
       return response.data;
     } catch (error: unknown) {
-      console.error('Error fetching customers:', error);
       return [];
     }
   },
@@ -141,7 +139,6 @@ export const quotationService = {
       const response = await api.get<InventoryItem[]>("/inventory-items");
       return response.data;
     } catch (error: unknown) {
-      console.error('Error fetching inventory items:', error);
       return [];
     }
   },

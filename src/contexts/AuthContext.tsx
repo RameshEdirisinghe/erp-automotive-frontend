@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       return user;
     } catch (error) {
-      console.error("Failed to get current user:", error);
       return null;
     }
   }, []);
@@ -71,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRole(currentUser.role as UserRole);
       }
     } catch (error) {
-      console.error("Auth initialization error:", error);
+      // Silent error handling
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       return false;
     } catch (error) {
-      console.error("Auth check error:", error);
       return false;
     }
   };
@@ -112,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       UserService.setCurrentUser(result.user as User);
       
     } catch (error: unknown) {
-      console.error("Login error:", error);
       throw error instanceof Error ? error : new Error("Login failed");
     } finally {
       setIsLoading(false);
@@ -124,13 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await authService.register(data);
       
-      if (result.user) {
-        console.log("User created successfully:", result.user);
-      }
-      
+      // User creation success is handled by the returned result
       return result;
     } catch (error: unknown) {
-      console.error("Registration error:", error);
       throw error instanceof Error ? error : new Error("Registration failed");
     } finally {
       setIsLoading(false);
@@ -141,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authService.logout();
     } catch (error) {
-      console.error("Logout error:", error);
+      // Silent error handling for logout
     } finally {
       UserService.setCurrentUser(null);
       

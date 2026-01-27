@@ -66,7 +66,6 @@ const Finance: React.FC = () => {
       const data = await invoiceService.getAll();
       setInvoices(data);
     } catch (error) {
-      console.error('Error loading invoices:', error);
       setAlert({
         type: 'error',
         message: 'Failed to load invoices. Please try again.'
@@ -81,9 +80,8 @@ const Finance: React.FC = () => {
     try {
       const transactions = await financeService.getAll();
       setFinanceTransactions(transactions);
-      console.log('Loaded finance transactions:', transactions);
     } catch (error) {
-      console.error('Error loading finance transactions:', error);
+      // Error handled by service 
     }
   };
 
@@ -136,8 +134,6 @@ const Finance: React.FC = () => {
         amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
       };
 
-      console.log('Creating payment transaction:', paymentData);
-
       // Create finance transaction
       await financeService.create(paymentData);
 
@@ -167,7 +163,6 @@ const Finance: React.FC = () => {
       });
 
     } catch (error: any) {
-      console.error('Error processing payment:', error);
       const errorMessage = error?.response?.data?.message ||
         error?.message ||
         'Failed to process payment. Please try again.';
@@ -302,7 +297,6 @@ const Finance: React.FC = () => {
           message: 'PDF downloaded successfully!'
         });
       } catch (error) {
-        console.error('Error generating PDF:', error);
         setAlert({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'

@@ -1,6 +1,6 @@
 import api from "../api/axios";
 import type { User, CreateUserDto, UpdateUserDto } from "../types/users";
-import type { AuthRes} from "../types/auth";
+import type { AuthRes } from "../types/auth";
 
 type UnifiedUser = User & {
   createdAt?: string;
@@ -125,7 +125,6 @@ class UserService {
         (!excludeId || user._id !== excludeId)
       );
     } catch (error) {
-      console.error("Failed to check email:", error);
       return false;
     }
   }
