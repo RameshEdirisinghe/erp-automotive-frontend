@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import FinanceTable from "../components/FinanceTable";
 import SearchFilterBar from "../components/SearchFilterBar";
@@ -49,7 +49,6 @@ const Finance: React.FC = () => {
     onConfirm: () => { },
   });
 
-  const invoiceRef = useRef<HTMLDivElement>(null);
   const [paymentDetails, setPaymentDetails] = useState({
     method: "Bank Transfer" as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
     bankName: "",
@@ -276,7 +275,6 @@ const Finance: React.FC = () => {
         });
 
         const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
         
         const imgWidth = pageWidth;
         const imgHeight = (canvas.height * imgWidth) / canvas.width;

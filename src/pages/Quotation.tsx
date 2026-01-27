@@ -270,7 +270,7 @@ const Quotation: React.FC = () => {
           setCopiedQuotationId(null);
         }, 2000);
       })
-      .catch((err) => {
+      .catch(() => {
         setAlert({
           type: 'error',
           message: 'Failed to copy link to clipboard'
@@ -289,7 +289,6 @@ const Quotation: React.FC = () => {
     }
 
     const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
-    const shareText = `Quotation ${quotationData.quotationId} - View online: ${quotationLink}`;
     
     // copy the link to clipboard
     try {
@@ -348,7 +347,6 @@ const Quotation: React.FC = () => {
 
   const shareViaMessenger = () => {
     const quotationLink = `${window.location.origin}/quotation/view/${quotationData._id}`;
-    const shareText = `Check out Quotation ${quotationData.quotationId}: ${quotationLink}`;
     window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(quotationLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
     setShowShareDropdown(false);
   };
