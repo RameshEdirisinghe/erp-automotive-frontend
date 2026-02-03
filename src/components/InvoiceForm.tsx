@@ -55,7 +55,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     setShowSuggestions: setShowItemSuggestions,
   } = useItemSearch(inventoryItems);
 
-  const [newItem, setNewItem] = useState({ 
+  interface NewItemState {
+    item: string;
+    quantity: string;
+    unitPrice: string;
+    itemName: string;
+  }
+
+  const [newItem, setNewItem] = useState<NewItemState>({ 
     item: "", 
     quantity: "1", 
     unitPrice: "0", 
@@ -64,7 +71,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
   const [discountInput, setDiscountInput] = useState(invoiceData.discountPercentage.toString());
 
-  React.useEffect(() => {
+  useEffect(() => {
     setDiscountInput(invoiceData.discountPercentage.toString());
   }, [invoiceData.discountPercentage]);
 
@@ -253,11 +260,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const { subTotal, discountAmount, taxAmount, totalAmount } = useMemo(() => {
     const subTotal = invoiceData.subTotal;
     const discountAmount = invoiceData.discount;
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? invoiceData.vatAmount : 0;
     const totalAmount = invoiceData.totalAmount;
     
     return { subTotal, discountAmount, taxAmount, totalAmount };
-  }, [invoiceData.subTotal, invoiceData.discount, invoiceData.totalAmount]);
+  }, [invoiceData.subTotal, invoiceData.discount, invoiceData.totalAmount, invoiceData.applyVat, invoiceData.vatAmount]);
 
   const handleDiscountPercentageChange = (value: string) => {
     setDiscountInput(value);
@@ -275,7 +282,12 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     onFieldChange('discountPercentage', clampedPercentage);
   };
 
-  React.useEffect(() => {
+  const handleVatToggle = () => {
+    const newVatState = !invoiceData.applyVat;
+    onFieldChange('applyVat', newVatState);
+  };
+
+  useEffect(() => {
     if (invoiceData.customerDetails && !selectedCustomer) {
       setSelectedCustomer(invoiceData.customerDetails as Customer);
       setCustomerSearchTerm(`${invoiceData.customerDetails.fullName} (${invoiceData.customerDetails.phone})`);
@@ -487,27 +499,52 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Discount (%)
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={discountInput}
-                onChange={(e) => handleDiscountPercentageChange(e.target.value)}
-                onBlur={handleDiscountBlur}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                %
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Discount (%)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={discountInput}
+                  onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                  onBlur={handleDiscountBlur}
+                  className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  %
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Discount Amount: <span className="text-green-400">LKR {discountAmount.toFixed(2)}</span>
               </div>
             </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Discount Amount: <span className="text-green-400">LKR {discountAmount.toFixed(2)}</span>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                VAT (18%)
+              </label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={invoiceData.applyVat}
+                      onChange={handleVatToggle}
+                      className="sr-only"
+                    />
+                    <div className={`block w-12 h-6 rounded-full transition-colors ${invoiceData.applyVat ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+                    <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${invoiceData.applyVat ? 'transform translate-x-6' : ''}`}></div>
+                  </div>
+                  <span className="ml-3 text-gray-300">
+                    {invoiceData.applyVat ? 'VAT Applied' : 'No VAT'}
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -534,8 +571,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         filteredItems={filteredItems}
         newItem={newItem}
         onItemSelect={handleItemSelect}
-        onQuantityChange={(quantity) => setNewItem(prev => ({ ...prev, quantity }))}
-        onUnitPriceChange={(unitPrice) => setNewItem(prev => ({ ...prev, unitPrice }))}
+        onQuantityChange={(quantity: string) => setNewItem(prev => ({ ...prev, quantity }))}
+        onUnitPriceChange={(unitPrice: string) => setNewItem(prev => ({ ...prev, unitPrice }))}
         onAddItem={handleAddItem}
         onClearSelection={handleClearItemSelection}
         itemTotal={itemTotal}
@@ -559,6 +596,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               discountAmount={discountAmount}
               taxAmount={taxAmount}
               totalAmount={totalAmount}
+              applyVat={invoiceData.applyVat}
             />
           </div>
         </div>

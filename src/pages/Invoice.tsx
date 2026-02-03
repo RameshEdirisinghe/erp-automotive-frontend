@@ -120,6 +120,9 @@ const Invoice: React.FC = () => {
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     vehicleNumber: "",
     notes: "",
+    applyVat: true,
+    vatAmount: 0,
+    taxRate: 0.18,
   });
 
   const [invoiceData, setInvoiceData] = useState<InvoiceData>(getInitialInvoiceData());
@@ -337,7 +340,7 @@ const Invoice: React.FC = () => {
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -345,7 +348,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -425,6 +429,9 @@ const Invoice: React.FC = () => {
       issueDate: formatDateToISO(data.issueDate),
       dueDate: formatDateToISO(data.dueDate),
       vehicleNumber: data.vehicleNumber,
+      applyVat: data.applyVat,
+      vatAmount: data.vatAmount,
+      taxRate: data.taxRate,
     };
 
     // Add optional fields only if they exist
@@ -447,7 +454,7 @@ const Invoice: React.FC = () => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -455,7 +462,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -474,7 +482,7 @@ const Invoice: React.FC = () => {
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -482,7 +490,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -493,11 +502,22 @@ const Invoice: React.FC = () => {
 
       if (field === 'discountPercentage') {
         const discountAmount = prev.subTotal * (Number(value) / 100);
-        const taxAmount = prev.subTotal * 0.18;
+        const taxAmount = prev.applyVat ? prev.subTotal * prev.taxRate : 0;
         const totalAmount = prev.subTotal + taxAmount - discountAmount;
         return {
           ...updated,
           discount: discountAmount,
+          totalAmount: totalAmount > 0 ? totalAmount : 0,
+          vatAmount: taxAmount
+        };
+      }
+
+      if (field === 'applyVat') {
+        const taxAmount = value ? prev.subTotal * prev.taxRate : 0;
+        const totalAmount = prev.subTotal + taxAmount - prev.discount;
+        return {
+          ...updated,
+          vatAmount: taxAmount,
           totalAmount: totalAmount > 0 ? totalAmount : 0
         };
       }
@@ -668,6 +688,9 @@ const Invoice: React.FC = () => {
           dueDate: invoice.dueDate,
           vehicleNumber: invoice.vehicleNumber,
           notes: invoice.notes,
+          applyVat: invoice.applyVat ?? true,
+          vatAmount: invoice.vatAmount || 0,
+          taxRate: invoice.taxRate || 0.18,
           created_at: invoice.created_at,
           updated_at: invoice.updated_at
         } as BackendInvoiceData & { customerName: string };
@@ -772,6 +795,9 @@ const Invoice: React.FC = () => {
         dueDate: formatDateForInput(fullInvoiceData.dueDate),
         vehicleNumber: fullInvoiceData.vehicleNumber || '',
         notes: fullInvoiceData.notes || '',
+        applyVat: fullInvoiceData.applyVat ?? true,
+        vatAmount: fullInvoiceData.vatAmount || 0,
+        taxRate: fullInvoiceData.taxRate || 0.18,
         created_at: fullInvoiceData.created_at,
         updated_at: fullInvoiceData.updated_at
       };
