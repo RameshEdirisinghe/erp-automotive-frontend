@@ -227,6 +227,9 @@ const Finance: React.FC = () => {
           dueDate: invoice.dueDate,
           vehicleNumber: invoice.vehicleNumber,
           notes: invoice.notes,
+          applyVat: invoice.applyVat ?? false,
+          vatAmount: invoice.vatAmount ?? 0,
+          taxRate: invoice.taxRate ?? 0,
         };
 
         const { createRoot } = await import('react-dom/client');

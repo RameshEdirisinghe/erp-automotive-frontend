@@ -82,6 +82,9 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
               dueDate: selectedInvoice.dueDate,
               vehicleNumber: selectedInvoice.vehicleNumber,
               notes: selectedInvoice.notes,
+              applyVat: selectedInvoice.applyVat ?? false,
+              vatAmount: selectedInvoice.vatAmount ?? 0,
+              taxRate: selectedInvoice.taxRate ?? 0,
             }}
           />
         </div>
@@ -283,6 +286,9 @@ export const InvoiceViewModal: React.FC<InvoiceViewModalProps> = ({
                     dueDate: selectedInvoice.dueDate,
                     vehicleNumber: selectedInvoice.vehicleNumber,
                     notes: selectedInvoice.notes,
+                    applyVat: selectedInvoice.applyVat ?? false,
+                    vatAmount: selectedInvoice.vatAmount ?? 0,
+                    taxRate: selectedInvoice.taxRate ?? 0,
                   }}
                 />
               </div>

@@ -51,6 +51,9 @@ const InvoiceView: React.FC = () => {
           dueDate: response.dueDate.split('T')[0],
           vehicleNumber: response.vehicleNumber || '',
           notes: response.notes || '',
+          applyVat: response.applyVat ?? false,
+          vatAmount: response.vatAmount ?? 0,
+          taxRate: response.taxRate ?? 0,
           created_at: response.created_at,
           updated_at: response.updated_at
         };
