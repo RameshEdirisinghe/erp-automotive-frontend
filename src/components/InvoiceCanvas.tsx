@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import type { InvoiceData } from "../types/invoice";
-import InvoiceTemplate from "../assets/Business invoice Template.jpg";
+import InvoiceTemplate from "../assets/business_invoice_template.jpg";
 
 interface InvoiceCanvasProps {
   invoiceData: InvoiceData;
