@@ -7,18 +7,12 @@ export const fetchFromBackend = async (endpoint: string) => {
 
     const data = await res.data;
     return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.error("Backend fetch error:", err);
+  } catch (_err) {
     return [];
   }
 };
 
 export const fetchSalesOverview = async () => {
-  try {
-    const res = await api.get("/invoices/analytics/sales-overview");
-    return res.data;
-  } catch (err) {
-    console.error("Failed to fetch sales overview:", err);
-    throw err;
-  }
+  const res = await api.get("/invoices/analytics/sales-overview");
+  return res.data;
 };

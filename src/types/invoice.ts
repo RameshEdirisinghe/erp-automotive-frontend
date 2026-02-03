@@ -68,6 +68,9 @@ export interface InvoiceData {
   dueDate: string;
   vehicleNumber: string;
   notes?: string;
+  applyVat: boolean;
+  vatAmount: number;
+  taxRate: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -91,6 +94,9 @@ export interface BackendInvoiceData {
   dueDate: string;
   notes?: string;
   bankDepositDate?: string;
+  applyVat?: boolean;
+  vatAmount?: number;
+  taxRate?: number;
   _id?: string;
 }
 
@@ -115,6 +121,9 @@ export interface InvoiceResponse {
   dueDate: string;
   vehicleNumber: string;
   notes?: string;
+  applyVat?: boolean;
+  vatAmount?: number;
+  taxRate?: number;
   created_at?: string;
   updated_at?: string;
 }

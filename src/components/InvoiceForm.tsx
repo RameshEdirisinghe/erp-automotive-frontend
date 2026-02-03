@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useCallback } from "react";
-import type { InvoiceData, InvoiceItem } from "../types/invoice";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import type { InvoiceData, InvoiceItem, InvoiceCustomer } from "../types/invoice";
 import type { InventoryItem } from "../types/inventory";
-import { PaymentMethod, PaymentStatus } from "../types/invoice";
+import { PaymentMethod, PaymentStatus, type PaymentStatusType } from "../types/invoice";
 import { useCustomerSearch, type Customer } from "../hooks/useCustomerSearch";
 import { useItemSearch } from "../hooks/useItemSearch";
 import { CustomerSearchAndManagement } from "./invoice/CustomerSearchAndManagement";
@@ -10,15 +10,19 @@ import { CustomerFormModal } from "./invoice/CustomerFormModal";
 import { ItemSearchAndAdd } from "./invoice/ItemSearchAndAdd";
 import { InvoiceItemsList } from "./invoice/InvoiceItemsList";
 import { InvoiceSummary } from "./invoice/InvoiceSummary";
+import PaymentModal from "../components/PaymentModal";
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
   onFieldChange: (field: keyof InvoiceData, value: string | number | boolean | Date) => void;
-  onCustomerIdChange: (customerId: string, customerDetails?: unknown) => void;
+  onCustomerIdChange: (customerId: string, customerDetails?: Customer) => void;
   onAddItem: (item: Omit<InvoiceItem, 'id' | 'total'>) => void;
   onRemoveItem: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<InvoiceItem>) => void;
   inventoryItems: InventoryItem[];
+  onPaymentStatusChange?: (status: PaymentStatusType, invoice: InvoiceData) => void;
+  onPaymentComplete?: () => Promise<void>;
+  isProcessingPayment?: boolean;
 }
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({
@@ -29,6 +33,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onRemoveItem,
   onUpdateItem,
   inventoryItems,
+  onPaymentStatusChange,
+  onPaymentComplete,
+  isProcessingPayment = false,
 }) => {
   const {
     filteredCustomers,
@@ -48,7 +55,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     setShowSuggestions: setShowItemSuggestions,
   } = useItemSearch(inventoryItems);
 
-  const [newItem, setNewItem] = useState({ 
+  interface NewItemState {
+    item: string;
+    quantity: string;
+    unitPrice: string;
+    itemName: string;
+  }
+
+  const [newItem, setNewItem] = useState<NewItemState>({ 
     item: "", 
     quantity: "1", 
     unitPrice: "0", 
@@ -57,12 +71,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
   const [discountInput, setDiscountInput] = useState(invoiceData.discountPercentage.toString());
 
-  React.useEffect(() => {
+  useEffect(() => {
     setDiscountInput(invoiceData.discountPercentage.toString());
   }, [invoiceData.discountPercentage]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerModalMode, setCustomerModalMode] = useState<'view' | 'create' | 'edit' | null>(null);
+
+  // Payment modal states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: invoiceData.paymentMethod as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  const [paymentModalTriggered, setPaymentModalTriggered] = useState(false);
 
   const itemTotal = useMemo(() => {
     const qty = parseInt(newItem.quantity) || 0;
@@ -86,6 +113,41 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
     return null;
   }, [newItem.item, newItem.quantity, inventoryItems, invoiceData.items]);
+
+  const handlePaymentStatusChange = useCallback((value: string) => {
+    const newStatus = value as PaymentStatusType;
+   
+    onFieldChange('paymentStatus', newStatus);
+    
+    if (newStatus === PaymentStatus.COMPLETED && !paymentModalTriggered && !isProcessingPayment) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: invoiceData.paymentMethod,
+        amount: (invoiceData.totalAmount > 0 ? invoiceData.totalAmount : 0).toFixed(2)
+      }));
+      
+      // Show payment modal
+      setShowPaymentModal(true);
+      setPaymentModalTriggered(true);
+      if (onPaymentStatusChange) {
+        onPaymentStatusChange(newStatus, invoiceData);
+      }
+    } else if (newStatus !== PaymentStatus.COMPLETED) {
+      setPaymentModalTriggered(false);
+    }
+  }, [invoiceData, onFieldChange, onPaymentStatusChange, paymentModalTriggered, isProcessingPayment]);
+
+  useEffect(() => {
+    if (invoiceData.paymentStatus !== PaymentStatus.COMPLETED) {
+      setPaymentModalTriggered(false);
+    }
+  }, [invoiceData.paymentStatus]);
+
+  useEffect(() => {
+    if (isProcessingPayment && showPaymentModal) {
+      setShowPaymentModal(false);
+    }
+  }, [isProcessingPayment, showPaymentModal]);
 
   const handleItemSelect = useCallback((inventoryItem: InventoryItem) => {
     setNewItem({ 
@@ -198,11 +260,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const { subTotal, discountAmount, taxAmount, totalAmount } = useMemo(() => {
     const subTotal = invoiceData.subTotal;
     const discountAmount = invoiceData.discount;
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? invoiceData.vatAmount : 0;
     const totalAmount = invoiceData.totalAmount;
     
     return { subTotal, discountAmount, taxAmount, totalAmount };
-  }, [invoiceData.subTotal, invoiceData.discount, invoiceData.totalAmount]);
+  }, [invoiceData.subTotal, invoiceData.discount, invoiceData.totalAmount, invoiceData.applyVat, invoiceData.vatAmount]);
 
   const handleDiscountPercentageChange = (value: string) => {
     setDiscountInput(value);
@@ -220,12 +282,65 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     onFieldChange('discountPercentage', clampedPercentage);
   };
 
-  React.useEffect(() => {
+  const handleVatToggle = () => {
+    const newVatState = !invoiceData.applyVat;
+    onFieldChange('applyVat', newVatState);
+  };
+
+  useEffect(() => {
     if (invoiceData.customerDetails && !selectedCustomer) {
       setSelectedCustomer(invoiceData.customerDetails as Customer);
       setCustomerSearchTerm(`${invoiceData.customerDetails.fullName} (${invoiceData.customerDetails.phone})`);
     }
   }, [invoiceData.customerDetails, selectedCustomer, setCustomerSearchTerm]);
+
+  const handlePaymentModalClose = () => {
+    setShowPaymentModal(false);
+    setPaymentModalTriggered(false);
+    
+    if (!isProcessingPayment && invoiceData.paymentStatus === PaymentStatus.COMPLETED) {
+      onFieldChange('paymentStatus', PaymentStatus.PENDING);
+    }
+  };
+
+  const handlePaymentCompleteInternal = async () => {
+    setShowPaymentModal(false);
+    setPaymentModalTriggered(true);
+    
+    if (onPaymentComplete) {
+      await onPaymentComplete();
+    }
+  };
+
+  const convertToInvoiceCustomer = (customer: Customer | null): InvoiceCustomer => {
+    if (!customer) {
+      return {
+        _id: '',
+        fullName: '',
+        phone: '',
+        email: '',
+        vatNumber: '',
+        address: undefined,
+        customerCode: '',
+        vehicle_number: '',
+        vehicle_model: '',
+        year_of_manufacture: undefined
+      };
+    }
+    
+    return {
+      _id: customer._id,
+      fullName: customer.fullName,
+      phone: customer.phone,
+      email: customer.email || '',
+      vatNumber: customer.vatNumber || '',
+      address: typeof customer.address === 'string' ? undefined : customer.address,
+      customerCode: customer.customerCode || '',
+      vehicle_number: customer.vehicle_number,
+      vehicle_model: customer.vehicle_model,
+      year_of_manufacture: customer.year_of_manufacture
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -248,6 +363,35 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           onSubmit={handleCustomerFormSubmit}
         />
       )}
+
+      {/* Payment Modal */}
+      <PaymentModal
+        key={`payment-modal-${showPaymentModal}`}
+        isOpen={showPaymentModal}
+        onClose={handlePaymentModalClose}
+        selectedInvoice={{
+          invoiceId: invoiceData.invoiceId,
+          _id: invoiceData._id || '',
+          totalAmount: invoiceData.totalAmount,
+          customer: convertToInvoiceCustomer(selectedCustomer),
+          paymentStatus: invoiceData.paymentStatus,
+          paymentMethod: invoiceData.paymentMethod,
+          bankDepositDate: invoiceData.bankDepositDate,
+          issueDate: invoiceData.issueDate,
+          dueDate: invoiceData.dueDate,
+          vehicleNumber: invoiceData.vehicleNumber,
+          notes: invoiceData.notes,
+          items: invoiceData.items,
+          subTotal: invoiceData.subTotal,
+          discount: invoiceData.discount,
+          created_at: invoiceData.created_at || '',
+          updated_at: invoiceData.updated_at || ''
+        }}
+        paymentDetails={paymentDetails}
+        onPaymentDetailsChange={setPaymentDetails}
+        onSubmit={handlePaymentCompleteInternal}
+        isProcessing={isProcessingPayment}
+      />
 
       <div className="bg-[#1e293b] rounded-lg p-5 border border-[#334155]">
         <h2 className="text-lg font-semibold text-gray-200 mb-4">Create Invoice</h2>
@@ -316,7 +460,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               </label>
               <select
                 value={invoiceData.paymentStatus}
-                onChange={(e) => onFieldChange('paymentStatus', e.target.value)}
+                onChange={(e) => handlePaymentStatusChange(e.target.value)}
                 className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
@@ -355,27 +499,52 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Discount (%)
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={discountInput}
-                onChange={(e) => handleDiscountPercentageChange(e.target.value)}
-                onBlur={handleDiscountBlur}
-                className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                %
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Discount (%)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={discountInput}
+                  onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                  onBlur={handleDiscountBlur}
+                  className="w-full bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  %
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Discount Amount: <span className="text-green-400">LKR {discountAmount.toFixed(2)}</span>
               </div>
             </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Discount Amount: <span className="text-green-400">LKR {discountAmount.toFixed(2)}</span>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                VAT (18%)
+              </label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={invoiceData.applyVat}
+                      onChange={handleVatToggle}
+                      className="sr-only"
+                    />
+                    <div className={`block w-12 h-6 rounded-full transition-colors ${invoiceData.applyVat ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+                    <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${invoiceData.applyVat ? 'transform translate-x-6' : ''}`}></div>
+                  </div>
+                  <span className="ml-3 text-gray-300">
+                    {invoiceData.applyVat ? 'VAT Applied' : 'No VAT'}
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -402,8 +571,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         filteredItems={filteredItems}
         newItem={newItem}
         onItemSelect={handleItemSelect}
-        onQuantityChange={(quantity) => setNewItem(prev => ({ ...prev, quantity }))}
-        onUnitPriceChange={(unitPrice) => setNewItem(prev => ({ ...prev, unitPrice }))}
+        onQuantityChange={(quantity: string) => setNewItem(prev => ({ ...prev, quantity }))}
+        onUnitPriceChange={(unitPrice: string) => setNewItem(prev => ({ ...prev, unitPrice }))}
         onAddItem={handleAddItem}
         onClearSelection={handleClearItemSelection}
         itemTotal={itemTotal}
@@ -427,6 +596,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               discountAmount={discountAmount}
               taxAmount={taxAmount}
               totalAmount={totalAmount}
+              applyVat={invoiceData.applyVat}
             />
           </div>
         </div>

@@ -33,7 +33,6 @@ export const invoiceService = {
       const response = await api.get<InvoiceResponse[]>("/invoices");
       return response.data;
     } catch (error: any) {
-      console.error('Error fetching invoices:', error.response?.data || error.message);
       if (error.response?.status === 401) {
         window.location.href = '/login';
       }
@@ -47,7 +46,6 @@ export const invoiceService = {
       const response = await api.get<InvoiceCustomer[]>("/customers");
       return response.data;
     } catch (error: unknown) {
-      console.error('Error fetching customers:', error);
       return [];
     }
   },
@@ -66,7 +64,7 @@ export const invoiceService = {
   // Get invoice by ID - Public
   async getById(id: string): Promise<InvoiceResponse> {
     try {
-      const response = await api.get<InvoiceResponse>(`/invoices/${id}`);
+      const response = await api.get<InvoiceResponse>(`/invoices/public/${id}`);
       return response.data;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || `Failed to fetch invoice ${id}`;
@@ -88,11 +86,9 @@ export const invoiceService = {
   // Create new invoice
   async create(invoiceData: BackendInvoiceData): Promise<InvoiceResponse> {
     try {
-      console.log('Sending invoice data:', JSON.stringify(invoiceData, null, 2));
       const response = await api.post<InvoiceResponse>("/invoices", invoiceData);
       return response.data;
     } catch (error: any) {
-      console.error('Error creating invoice:', error.response?.data || error.message);
       const errorMessage = error.response?.data?.message || error.message || "Failed to create invoice";
       throw new Error(errorMessage);
     }
@@ -137,7 +133,6 @@ export const invoiceService = {
       const response = await api.get<InventoryItem[]>("/inventory-items");
       return response.data;
     } catch (error: unknown) {
-      console.error('Error fetching inventory items:', error);
       return [];
     }
   },

@@ -8,7 +8,6 @@ import Finance from "../pages/Finance";
 import Invoice from "../pages/Invoice";
 import UserManagement from "../pages/UserManagement";
 import ProtectedRoute from "./ProtectedRoute";
-import AdminRoute from "./AdminRoute";
 import InvoiceView from "../pages/InvoiceView";
 import QuotationView from "../pages/QuotationView";
 import RoleRoute from "./RoleRoute";

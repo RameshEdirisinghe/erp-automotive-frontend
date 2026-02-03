@@ -19,9 +19,11 @@ import {
   Clock,
   Copy,
   Check,
+  Share2,
 } from "lucide-react";
 import InvoiceForm from "../components/InvoiceForm";
 import InvoiceCanvas from "../components/InvoiceCanvas";
+import PaymentModal from "../components/PaymentModal";
 import type {
   InvoiceData,
   InvoiceItem,
@@ -32,6 +34,8 @@ import type {
 import type { InventoryItem as InvoiceInventoryItem } from "../types/inventory";
 import { PaymentStatus, PaymentMethod } from "../types/invoice";
 import { invoiceService } from "../services/InvoiceService";
+import { financeService } from "../services/FinanceService";
+import type { FinancePaymentData } from "../types/finance";
 import { inventoryService } from "../services/InventoryService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -48,6 +52,7 @@ const Invoice: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InvoiceInventoryItem[]>([]);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -67,7 +72,20 @@ const Invoice: React.FC = () => {
   const itemsPerPage = 10;
   const [manageSearch, setManageSearch] = useState("");
 
-  // Add state for copy confirmation
+  // Payment modal states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: PaymentMethod.CASH as 'Bank Transfer' | 'Cash' | 'Card' | 'Bank Deposit' | 'Cheque',
+    bankName: "",
+    accountNumber: "",
+    transactionRef: "",
+    amount: "",
+    transactionDate: new Date().toISOString().split('T')[0]
+  });
+
+  const [paymentModalTriggeredByForm, setPaymentModalTriggeredByForm] = useState(false);
+
+  // state for copy confirmation
   const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
 
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -84,6 +102,9 @@ const Invoice: React.FC = () => {
     onConfirm: () => { },
   });
 
+  // Add state for share dropdown
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
+
   const getInitialInvoiceData = (): InvoiceData => ({
     invoiceId: "",
     customer: "",
@@ -99,6 +120,9 @@ const Invoice: React.FC = () => {
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     vehicleNumber: "",
     notes: "",
+    applyVat: true,
+    vatAmount: 0,
+    taxRate: 0.18,
   });
 
   const [invoiceData, setInvoiceData] = useState<InvoiceData>(getInitialInvoiceData());
@@ -154,16 +178,22 @@ const Invoice: React.FC = () => {
       setInventoryItems(items as InvoiceInventoryItem[]);
 
       const nextId = await invoiceService.getNextId();
-      setInvoiceData({
+      const initialInvoiceData = {
         ...getInitialInvoiceData(),
         invoiceId: nextId
-      });
+      };
+      setInvoiceData(initialInvoiceData);
       lastSavedRef.current = null;
       setIsDirty(false);
       lastSavedAtRef.current = null;
 
+      // Update paymentDetails
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: initialInvoiceData.paymentMethod
+      }));
+
     } catch (error) {
-      console.error('Error loading data:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load data'
@@ -176,6 +206,110 @@ const Invoice: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Update paymentDetails when invoiceData changes
+  useEffect(() => {
+    setPaymentDetails(prev => ({
+      ...prev,
+      method: invoiceData.paymentMethod
+    }));
+  }, [invoiceData.paymentMethod]);
+
+  // payment submission from invoice form
+  const handlePaymentSubmit = async () => {
+    if (!invoiceData._id) {
+      setAlert({
+        type: 'error',
+        message: 'Please save the invoice first before recording payment'
+      });
+      return;
+    }
+
+    try {
+      setIsProcessingPayment(true);
+
+      // First get the next transaction ID
+      const transactionId = await financeService.getNextId();
+      const paymentMethod = paymentDetails.method || invoiceData.paymentMethod;
+      const paymentData: FinancePaymentData = {
+        transactionId: transactionId,
+        transactionDate: new Date(paymentDetails.transactionDate).toISOString(),
+        paymentMethod: {
+          type: paymentMethod,
+          bankName: paymentDetails.bankName || 'N/A',
+          accountNumber: paymentDetails.accountNumber || 'N/A',
+          transactionRef: paymentDetails.transactionRef || 'PAY-' + Date.now(),
+        },
+        invoice: {
+          invoiceId: invoiceData.invoiceId,
+        },
+        amount: 'LKR ' + parseFloat(paymentDetails.amount).toFixed(2),
+      };
+
+      // Create finance transaction
+      await financeService.create(paymentData);
+      await invoiceService.updatePaymentStatus(invoiceData._id, 'Completed');
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.COMPLETED
+      }));
+
+      setAlert({
+        type: 'success',
+        message: 'Payment successfully recorded for invoice ' + invoiceData.invoiceId
+      });
+
+      // Reset payment modal state
+      setShowPaymentModal(false);
+      setPaymentModalTriggeredByForm(false);
+      setPaymentDetails({
+        method: invoiceData.paymentMethod,
+        bankName: "",
+        accountNumber: "",
+        transactionRef: "",
+        amount: "",
+        transactionDate: new Date().toISOString().split('T')[0]
+      });
+
+      if (viewMode === 'manage') {
+        fetchAllInvoices();
+      }
+
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message ||
+        error?.message ||
+        'Failed to process payment. Please try again.';
+      setAlert({
+        type: 'error',
+        message: errorMessage
+      });
+      
+      setInvoiceData(prev => ({
+        ...prev,
+        paymentStatus: PaymentStatus.PENDING
+      }));
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // payment status change from invoice form
+  const handlePaymentStatusChange = (status: typeof PaymentStatus[keyof typeof PaymentStatus], invoice: InvoiceData) => {
+    if (status === PaymentStatus.COMPLETED && !paymentModalTriggeredByForm && !isProcessingPayment) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        method: invoice.paymentMethod, 
+        amount: (invoice.totalAmount > 0 ? invoice.totalAmount : 0).toFixed(2)
+      }));
+      setShowPaymentModal(true);
+      setPaymentModalTriggeredByForm(true);
+    }
+  };
+
+  // payment completion from form
+  const handlePaymentComplete = async () => {
+    await handlePaymentSubmit();
+  };
 
   const handleAddItem = (item: Omit<InvoiceItem, 'id' | 'total'>) => {
     const total = item.quantity * item.unitPrice;
@@ -206,7 +340,7 @@ const Invoice: React.FC = () => {
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -214,7 +348,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -268,7 +403,6 @@ const Invoice: React.FC = () => {
   }, [isDirty]);
 
   const prepareInvoiceForSave = (data: InvoiceData): BackendInvoiceData => {
-
     const formatDateToISO = (dateString: string): string => {
       if (!dateString) return new Date().toISOString();
 
@@ -295,6 +429,9 @@ const Invoice: React.FC = () => {
       issueDate: formatDateToISO(data.issueDate),
       dueDate: formatDateToISO(data.dueDate),
       vehicleNumber: data.vehicleNumber,
+      applyVat: data.applyVat,
+      vatAmount: data.vatAmount,
+      taxRate: data.taxRate,
     };
 
     // Add optional fields only if they exist
@@ -317,7 +454,7 @@ const Invoice: React.FC = () => {
     const newItems = invoiceData.items.filter(item => item.id !== id);
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -325,7 +462,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -344,7 +482,7 @@ const Invoice: React.FC = () => {
 
     const subTotal = newItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subTotal * (invoiceData.discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * invoiceData.taxRate : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
 
     setInvoiceData(prev => ({
@@ -352,7 +490,8 @@ const Invoice: React.FC = () => {
       items: newItems,
       subTotal,
       discount: discountAmount,
-      totalAmount: totalAmount > 0 ? totalAmount : 0
+      totalAmount: totalAmount > 0 ? totalAmount : 0,
+      vatAmount: taxAmount
     }));
     setIsDirty(true);
   };
@@ -363,11 +502,22 @@ const Invoice: React.FC = () => {
 
       if (field === 'discountPercentage') {
         const discountAmount = prev.subTotal * (Number(value) / 100);
-        const taxAmount = prev.subTotal * 0.18;
+        const taxAmount = prev.applyVat ? prev.subTotal * prev.taxRate : 0;
         const totalAmount = prev.subTotal + taxAmount - discountAmount;
         return {
           ...updated,
           discount: discountAmount,
+          totalAmount: totalAmount > 0 ? totalAmount : 0,
+          vatAmount: taxAmount
+        };
+      }
+
+      if (field === 'applyVat') {
+        const taxAmount = value ? prev.subTotal * prev.taxRate : 0;
+        const totalAmount = prev.subTotal + taxAmount - prev.discount;
+        return {
+          ...updated,
+          vatAmount: taxAmount,
           totalAmount: totalAmount > 0 ? totalAmount : 0
         };
       }
@@ -455,8 +605,6 @@ const Invoice: React.FC = () => {
 
       return true;
     } catch (error: any) {
-      console.error('Error saving invoice:', error);
-
       let errorMessage = 'Failed to save invoice';
       if (error.response) {
         // Server responded with error
@@ -492,7 +640,7 @@ const Invoice: React.FC = () => {
         const customers = await invoiceService.getAllCustomers();
         setAllCustomers(customers);
       } catch (customerError) {
-        console.warn('Could not fetch customers:', customerError);
+        // Silent fail for customer fetch
       }
 
       // Fetch all invoices
@@ -507,7 +655,6 @@ const Invoice: React.FC = () => {
 
       // Map invoices with customer details
       const normalized = sortedInvoices.map((invoice: any) => {
-        // Extract customer details
         let customer = invoice.customer;
         let customerName = '';
 
@@ -541,6 +688,9 @@ const Invoice: React.FC = () => {
           dueDate: invoice.dueDate,
           vehicleNumber: invoice.vehicleNumber,
           notes: invoice.notes,
+          applyVat: invoice.applyVat ?? true,
+          vatAmount: invoice.vatAmount || 0,
+          taxRate: invoice.taxRate || 0.18,
           created_at: invoice.created_at,
           updated_at: invoice.updated_at
         } as BackendInvoiceData & { customerName: string };
@@ -548,7 +698,6 @@ const Invoice: React.FC = () => {
 
       setAllInvoices(normalized);
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       setAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to load invoices'
@@ -558,7 +707,6 @@ const Invoice: React.FC = () => {
     }
   };
 
-  // Helper function to get customer name for display
   const getCustomerDisplay = (invoice: any): string => {
     if (!invoice) return 'Unknown Customer';
 
@@ -589,7 +737,7 @@ const Invoice: React.FC = () => {
           const response = await invoiceService.getById(invoiceData._id);
           fullInvoiceData = response as any;
         } catch (fetchError) {
-          console.warn('Could not fetch full invoice details, using summary data:', fetchError);
+          // Use summary data if full fetch fails
         }
       }
 
@@ -622,7 +770,6 @@ const Invoice: React.FC = () => {
       if (typeof fullInvoiceData.customer === 'object' && fullInvoiceData.customer !== null) {
         customerDetails = fullInvoiceData.customer;
       } else if (typeof fullInvoiceData.customer === 'string') {
-
         const foundCustomer = allCustomers.find(c => c._id === fullInvoiceData.customer);
         if (foundCustomer) {
           customerDetails = foundCustomer;
@@ -648,6 +795,9 @@ const Invoice: React.FC = () => {
         dueDate: formatDateForInput(fullInvoiceData.dueDate),
         vehicleNumber: fullInvoiceData.vehicleNumber || '',
         notes: fullInvoiceData.notes || '',
+        applyVat: fullInvoiceData.applyVat ?? true,
+        vatAmount: fullInvoiceData.vatAmount || 0,
+        taxRate: fullInvoiceData.taxRate || 0.18,
         created_at: fullInvoiceData.created_at,
         updated_at: fullInvoiceData.updated_at
       };
@@ -666,7 +816,6 @@ const Invoice: React.FC = () => {
         message: `Invoice ${fullInvoiceData.invoiceId} loaded successfully`
       });
     } catch (error) {
-      console.error('Error loading invoice:', error);
       setAlert({
         type: 'error',
         message: 'Failed to load invoice data'
@@ -690,7 +839,6 @@ const Invoice: React.FC = () => {
           });
           fetchAllInvoices();
         } catch (error) {
-          console.error('Error deleting invoice:', error);
           setAlert({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to delete invoice'
@@ -701,29 +849,115 @@ const Invoice: React.FC = () => {
   };
 
   // copy invoice link to clipboard
- const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
-  const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
-  
-  navigator.clipboard.writeText(invoiceLink)
-    .then(() => {
-      setCopiedInvoiceId(invoiceId);
-      setAlert({
-        type: 'success',
-        message: `Invoice ${invoiceNumber} link copied to clipboard!`
+  const handleCopyInvoiceLink = (invoiceId: string, invoiceNumber: string) => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceId}`;
+
+    navigator.clipboard.writeText(invoiceLink)
+      .then(() => {
+        setCopiedInvoiceId(invoiceId);
+        setAlert({
+          type: 'success',
+          message: `Invoice ${invoiceNumber} link copied to clipboard!`
+        });
+
+        setTimeout(() => {
+          setCopiedInvoiceId(null);
+        }, 2000);
+      })
+      .catch(() => {
+        setAlert({
+          type: 'error',
+          message: 'Failed to copy link to clipboard'
+        });
       });
-      
-      setTimeout(() => {
-        setCopiedInvoiceId(null);
-      }, 2000);
-    })
-    .catch((err) => {
-      console.error('Failed to copy link: ', err);
+  };
+
+  // Handle share invoice link
+  const handleShareInvoice = async () => {
+    if (!invoiceData._id) {
       setAlert({
         type: 'error',
-        message: 'Failed to copy link to clipboard'
+        message: 'Please save the invoice first before sharing'
       });
-    });
-};
+      return;
+    }
+
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    
+    // copy the link to clipboard automatically
+    try {
+      await navigator.clipboard.writeText(invoiceLink);
+    } catch (err) {
+      // Silent fail for clipboard copy
+    }
+
+    // using Web Share API
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Invoice ${invoiceData.invoiceId}`,
+          text: `Check out Invoice ${invoiceData.invoiceId}`,
+          url: invoiceLink,
+        });
+        setAlert({
+          type: 'success',
+          message: 'Link also copied to clipboard.'
+        });
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          setShowShareDropdown(true);
+        } else {
+          setAlert({
+            type: 'info',
+            message: 'Invoice link copied to clipboard!'
+          });
+        }
+      }
+    } else {
+      // Web Share API not supported
+      setShowShareDropdown(true);
+      setAlert({
+        type: 'success',
+        message: 'Invoice link copied to clipboard! Select sharing option below.'
+      });
+    }
+  };
+
+  // Share via apps
+  const shareViaWhatsApp = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaEmail = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const subject = `Invoice ${invoiceData.invoiceId}`;
+    const body = `Please find the invoice here: ${invoiceLink}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaMessenger = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(invoiceLink)}&app_id=YOUR_APP_ID&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaSMS = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId}: ${invoiceLink}`;
+    window.open(`sms:?body=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
+
+  const shareViaTelegram = () => {
+    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+    const shareText = `Invoice ${invoiceData.invoiceId} - View online: ${invoiceLink}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(invoiceLink)}&text=${encodeURIComponent(shareText)}`, '_blank');
+    setShowShareDropdown(false);
+  };
 
   const handleOpenManageModal = () => {
     setViewMode('manage');
@@ -877,7 +1111,6 @@ const Invoice: React.FC = () => {
           message: 'PDF downloaded successfully!'
         });
       } catch (error) {
-        console.error('Error generating PDF:', error);
         setAlert({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.'
@@ -1034,7 +1267,6 @@ const Invoice: React.FC = () => {
         setIsGeneratingPDF(false);
 
       } catch (error) {
-        console.error('Error preparing print:', error);
         setAlert({
           type: 'error',
           message: 'Failed to prepare print. Please try again.'
@@ -1061,6 +1293,17 @@ const Invoice: React.FC = () => {
 
     await proceedWithPrint();
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareDropdown && !(event.target as Element).closest('.share-dropdown-container')) {
+        setShowShareDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareDropdown]);
 
   return (
     <div className="flex h-screen bg-[#0f172a] text-white overflow-hidden">
@@ -1089,6 +1332,128 @@ const Invoice: React.FC = () => {
           }}
           onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         />
+
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPaymentModalTriggeredByForm(false);
+            
+            if (!isProcessingPayment && invoiceData.paymentStatus === PaymentStatus.COMPLETED) {
+              setInvoiceData(prev => ({
+                ...prev,
+                paymentStatus: PaymentStatus.PENDING
+              }));
+            }
+          }}
+          selectedInvoice={{
+            invoiceId: invoiceData.invoiceId,
+            _id: invoiceData._id || '',
+            totalAmount: invoiceData.totalAmount,
+            customer: invoiceData.customerDetails as InvoiceCustomer,
+            paymentStatus: invoiceData.paymentStatus,
+            paymentMethod: invoiceData.paymentMethod,
+            bankDepositDate: invoiceData.bankDepositDate,
+            issueDate: invoiceData.issueDate,
+            dueDate: invoiceData.dueDate,
+            vehicleNumber: invoiceData.vehicleNumber,
+            notes: invoiceData.notes,
+            items: invoiceData.items,
+            subTotal: invoiceData.subTotal,
+            discount: invoiceData.discount,
+            created_at: invoiceData.created_at || '',
+            updated_at: invoiceData.updated_at || ''
+          }}
+          paymentDetails={paymentDetails}
+          onPaymentDetailsChange={setPaymentDetails}
+          onSubmit={handlePaymentSubmit}
+          isProcessing={isProcessingPayment}
+        />
+
+        {/* Share Dropdown */}
+        {showShareDropdown && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#1e293b] rounded-lg p-4 w-64 share-dropdown-container">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-200">Share Invoice</h3>
+                <button
+                  onClick={() => setShowShareDropdown(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={shareViaWhatsApp}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition"
+                >
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">WA</span>
+                  </div>
+                  <span>WhatsApp</span>
+                </button>
+                <button
+                  onClick={shareViaEmail}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">@</span>
+                  </div>
+                  <span>Email</span>
+                </button>
+                <button
+                  onClick={shareViaMessenger}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-500 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">f</span>
+                  </div>
+                  <span>Messenger</span>
+                </button>
+                <button
+                  onClick={shareViaSMS}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition"
+                >
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">SMS</span>
+                  </div>
+                  <span>SMS</span>
+                </button>
+                <button
+                  onClick={shareViaTelegram}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-400/20 hover:bg-blue-400/30 text-blue-300 transition"
+                >
+                  <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">TG</span>
+                  </div>
+                  <span>Telegram</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const invoiceLink = `${window.location.origin}/invoice/view/${invoiceData._id}`;
+                    navigator.clipboard.writeText(invoiceLink);
+                    setAlert({
+                      type: 'success',
+                      message: 'Invoice link copied to clipboard again!'
+                    });
+                    setShowShareDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition"
+                >
+                  <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <Copy className="w-4 h-4 text-white" />
+                  </div>
+                  <span>Copy Link Again</span>
+                </button>
+              </div>
+              <div className="mt-4 text-sm text-gray-400 text-center">
+                Link is already copied to clipboard
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="h-16 bg-[#0f172a]/70 backdrop-blur-sm border-b border-[#1f2937] flex items-center justify-between px-4 md:px-6 relative z-40">
           <div className="flex items-center gap-3">
@@ -1360,6 +1725,9 @@ const Invoice: React.FC = () => {
                       onRemoveItem={handleRemoveItem}
                       onUpdateItem={handleUpdateItem}
                       inventoryItems={inventoryItems}
+                      onPaymentStatusChange={handlePaymentStatusChange}
+                      onPaymentComplete={handlePaymentComplete}
+                      isProcessingPayment={isProcessingPayment}
                     />
                   </ErrorBoundary>
                 )}
@@ -1428,9 +1796,21 @@ const Invoice: React.FC = () => {
                         )}
                       </button>
 
+                      <div className="relative share-dropdown-container">
+                        <button
+                          onClick={handleShareInvoice}
+                          disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
+                          className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Share Invoice Link"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Share</span>
+                        </button>
+                      </div>
+
                       <button
                         onClick={downloadPDF}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isGeneratingPDF ? (
@@ -1445,7 +1825,7 @@ const Invoice: React.FC = () => {
 
                       <button
                         onClick={handlePrint}
-                        disabled={isLoading || isGeneratingPDF || isSaving}
+                        disabled={!invoiceData._id || isLoading || isGeneratingPDF || isSaving}
                         className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Printer className="w-4 h-4" />

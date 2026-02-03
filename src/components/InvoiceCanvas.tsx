@@ -26,7 +26,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
     const subTotal = invoiceData.subTotal;
     const discountPercentage = invoiceData.discountPercentage || 0;
     const discountAmount = subTotal * (discountPercentage / 100);
-    const taxAmount = subTotal * 0.18;
+    const taxAmount = invoiceData.applyVat ? subTotal * (invoiceData.taxRate || 0.18) : 0;
     const totalAmount = subTotal + taxAmount - discountAmount;
     
     return { subTotal, discountPercentage, discountAmount, taxAmount, totalAmount };
@@ -39,7 +39,7 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
   };
 
   // Company VAT number 
-  const companyVatNumber = "VAT123456789";
+  const companyVatNumber = "218231209 - 7000";
 
   useEffect(() => {
     if (templateRef.current) {
@@ -58,7 +58,6 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
       details.push(<div key="no-customer">Customer information not available</div>);
       return details;
     }
-    
     
     // Add address if it exists
     if (invoiceData.customerDetails.address) {
@@ -416,10 +415,14 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
               <span style={{ fontWeight: 'bold' }}>SUBTOTAL:</span>
               <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {subTotal.toFixed(2)}</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
-              <span style={{ fontWeight: 'bold' }}>TAX (18%):</span>
-              <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {taxAmount.toFixed(2)}</span>
-            </div>
+            
+            {invoiceData.applyVat && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
+                <span style={{ fontWeight: 'bold' }}>TAX (18%):</span>
+                <span style={{ textAlign: 'right', minWidth: '50px' }}>LKR {taxAmount.toFixed(2)}</span>
+              </div>
+            )}
+            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', marginBottom: '2mm', paddingBottom: '1mm' }}>
               <span style={{ fontWeight: 'bold' }}>DISCOUNT ({discountPercentage}%):</span>
               <span style={{ textAlign: 'right', minWidth: '50px' }}>- LKR {discountAmount.toFixed(2)}</span>
@@ -498,6 +501,10 @@ const InvoiceCanvas: React.FC<InvoiceCanvasProps> = ({ invoiceData }) => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
               <span style={{ fontWeight: '500' }}>Due Date:</span>
               <span>{formatDate(invoiceData.dueDate)}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2mm', marginBottom: '1mm' }}>
+              <span style={{ fontWeight: '500' }}>VAT Applied:</span>
+              <span>{invoiceData.applyVat ? 'Yes' : 'No'}</span>
             </div>
           </div>
         </div>
